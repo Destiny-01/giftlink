@@ -1,0 +1,141 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Base colors - DeFi theme */
+    --background: 212 73% 10%; /* #071029 deep navy */
+    --surface: 215 68% 7%; /* #0b1220 near-black */
+    --muted: 200 50% 14%; /* #0f2a3a */
+
+    --foreground: 200 45% 92%; /* #E6F0F6 off-white */
+    --muted-foreground: 207 27% 68%; /* #9FB3C8 */
+
+    /* Accent colors */
+    --accent: 170 100% 50%; /* #00FFD1 electric teal */
+    --accent-2: 162 70% 65%; /* #6CE7B5 soft teal */
+    --accent-foreground: 212 73% 10%;
+
+    --gold: 45 100% 70%; /* #FFD166 */
+
+    --primary: 170 100% 50%;
+    --primary-foreground: 212 73% 10%;
+
+    --secondary: 207 27% 68%;
+    --secondary-foreground: 200 45% 92%;
+
+    /* Status colors */
+    --success: 142 71% 58%; /* #4ADE80 */
+    --danger: 0 100% 71%; /* #FF6B6B */
+
+    --destructive: 0 100% 71%;
+    --destructive-foreground: 200 45% 92%;
+
+    /* UI elements */
+    --card: 215 68% 7%;
+    --card-foreground: 200 45% 92%;
+
+    --popover: 215 68% 7%;
+    --popover-foreground: 200 45% 92%;
+
+    --border: 0 0% 100% / 0.04;
+    --input: 0 0% 100% / 0.08;
+    --ring: 170 100% 50%;
+
+    --radius: 0.75rem;
+
+    /* Gradients */
+    --gradient-hero: linear-gradient(
+      120deg,
+      rgba(0, 255, 209, 0.12),
+      rgba(102, 231, 181, 0.06)
+    );
+    --gradient-accent: linear-gradient(
+      135deg,
+      hsl(var(--accent)),
+      hsl(var(--accent-2))
+    );
+
+    /* Shadows */
+    --shadow-card: 0 6px 30px rgba(1, 8, 16, 0.6);
+    --shadow-glow: 0 0 40px rgba(0, 255, 209, 0.15);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-bold;
+  }
+
+  h1 {
+    @apply text-4xl md:text-5xl lg:text-6xl;
+  }
+
+  h2 {
+    @apply text-2xl md:text-3xl lg:text-4xl;
+  }
+
+  h3 {
+    @apply text-xl md:text-2xl;
+  }
+}
+
+/* Custom Scrollbar Styling */
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: hsl(var(--surface));
+    border-radius: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 4px;
+    border: 1px solid hsl(var(--surface));
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--accent) / 0.3);
+  }
+
+  /* Firefox */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) hsl(var(--surface));
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}

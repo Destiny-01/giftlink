@@ -1,0 +1,134 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  privyId       String   @unique
+  walletAddress String?  @unique
+  email         String?  @unique
+  discordId     String?  @unique
+  twitterId     String?  @unique
+  telegramId    String?  @unique
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([privyId])
+  @@index([walletAddress])
+  @@index([email])
+  @@index([discordId])
+  @@index([twitterId])
+  @@index([telegramId])
+}
+
+model Drop {
+  id                  String        @id @default(uuid())
+  onchainId           BigInt?       @unique
+  senderAddress       String
+  senderPrivyId       String?
+  senderIdentifier    String?
+  recipientType       RecipientType
+  recipientIdentifier String
+  recipientPrivyId    String?
+  recipientCommit     String
+  amount              String
+  gasTankAmount       String?
+  message             String?
+  isAnonymous         Boolean       @default(false)
+  status              DropStatus    @default(PENDING)
+  expiry              DateTime?
+  creationTxHash      String?
+  claimTxHash         String?
+  revokeTxHash        String?
+  claimerAddress      String?
+  claimerIdentifier   String?
+  relayerAddress      String?
+  estimatedGasCost    String?
+  senderWalletType    WalletType
+  claimerWalletType   WalletType?
+  createdAt           DateTime      @default(now())
+  claimedAt           DateTime?
+  updatedAt           DateTime      @updatedAt
+  events              DropEvent[]
+
+  @@index([senderAddress])
+  @@index([senderPrivyId])
+  @@index([recipientIdentifier])
+  @@index([recipientPrivyId])
+  @@index([status])
+  @@index([onchainId])
+  @@index([recipientCommit])
+}
+
+model SocialIdentity {
+  id             String               @id @default(uuid())
+  identifierType SocialIdentifierType
+  identifierRaw  String
+  identifierHash String
+  walletAddress  String
+  verifiedAt     DateTime             @default(now())
+  oauthProvider  String?
+  lastVerifiedAt DateTime             @default(now())
+
+  @@unique([identifierHash, walletAddress])
+  @@index([identifierHash])
+  @@index([walletAddress])
+  @@index([identifierRaw])
+}
+
+model DropEvent {
+  id           String        @id @default(uuid())
+  dropId       String
+  drop         Drop          @relation(fields: [dropId], references: [id], onDelete: Cascade)
+  eventType    DropEventType
+  actorAddress String?
+  txHash       String?
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+
+  @@index([dropId])
+  @@index([eventType])
+}
+
+enum RecipientType {
+  PUBLIC
+  EMAIL
+  DISCORD
+  TWITTER
+  WALLET
+}
+
+enum DropStatus {
+  PENDING
+  ACTIVE
+  CLAIMED
+  REVOKED
+  EXPIRED
+}
+
+enum WalletType {
+  EXTERNAL
+  PRIVY
+}
+
+enum DropEventType {
+  CREATED
+  CLAIMED
+  REVOKED
+  RECEIVER_UPDATED
+  EXPIRED
+}
+
+enum SocialIdentifierType {
+  EMAIL
+  DISCORD
+  TWITTER
+}

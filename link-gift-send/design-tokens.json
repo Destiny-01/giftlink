@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json.schemastore.org/design-tokens",
+  "colors": {
+    "background": {
+      "value": "hsl(212, 73%, 10%)",
+      "description": "Deep navy background"
+    },
+    "surface": {
+      "value": "hsl(215, 68%, 7%)",
+      "description": "Near-black card surface"
+    },
+    "foreground": {
+      "value": "hsl(200, 45%, 92%)",
+      "description": "Off-white text"
+    },
+    "accent": {
+      "value": "hsl(170, 100%, 50%)",
+      "description": "Electric teal primary accent"
+    },
+    "accent-2": {
+      "value": "hsl(162, 70%, 65%)",
+      "description": "Soft teal secondary accent"
+    },
+    "gold": {
+      "value": "hsl(45, 100%, 70%)",
+      "description": "Gold accent"
+    },
+    "success": {
+      "value": "hsl(142, 71%, 58%)",
+      "description": "Success green"
+    },
+    "danger": {
+      "value": "hsl(0, 100%, 71%)",
+      "description": "Danger red"
+    },
+    "muted": {
+      "value": "hsl(200, 50%, 14%)",
+      "description": "Muted surface"
+    },
+    "muted-foreground": {
+      "value": "hsl(207, 27%, 68%)",
+      "description": "Muted text"
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "sans": "Inter, system-ui, sans-serif",
+      "display": "Space Grotesk, Inter, system-ui, sans-serif"
+    },
+    "fontSize": {
+      "h1": "2.5rem",
+      "h2": "1.75rem",
+      "h3": "1.25rem",
+      "body": "1rem",
+      "small": "0.813rem"
+    },
+    "fontWeight": {
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    }
+  },
+  "spacing": {
+    "xs": "0.25rem",
+    "sm": "0.5rem",
+    "md": "1rem",
+    "lg": "1.5rem",
+    "xl": "2rem",
+    "2xl": "3rem"
+  },
+  "borderRadius": {
+    "default": "0.75rem",
+    "lg": "var(--radius)",
+    "md": "calc(var(--radius) - 2px)",
+    "sm": "calc(var(--radius) - 4px)"
+  },
+  "shadows": {
+    "card": "0 6px 30px rgba(1,8,16,0.6)",
+    "glow": "0 0 40px rgba(0,255,209,0.15)"
+  },
+  "animations": {
+    "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+  }
+}

@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="2650" viewBox="0 0 1600 2650" role="img" aria-labelledby="title desc">
+  <title id="title">Claim Layer and Economic Inbox product roadmap</title>
+  <desc id="desc">A seven-phase roadmap from an Arc proof in September 2026 to a portable economic addressing layer, with exit gates and parallel company workstreams.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#080a0e"/>
+      <stop offset="0.52" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#10131a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#64e6d2"/>
+      <stop offset="1" stop-color="#aa7cff"/>
+    </linearGradient>
+    <linearGradient id="phase0" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#143f3b"/>
+      <stop offset="1" stop-color="#11161d"/>
+    </linearGradient>
+    <linearGradient id="phase1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#183247"/>
+      <stop offset="1" stop-color="#11161d"/>
+    </linearGradient>
+    <linearGradient id="phase2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#252d4f"/>
+      <stop offset="1" stop-color="#11161d"/>
+    </linearGradient>
+    <linearGradient id="phase3" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#342b55"/>
+      <stop offset="1" stop-color="#11161d"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="18" flood-color="#000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="8" refY="6" orient="auto">
+      <path d="M0,0 L0,12 L10,6 z" fill="#4e5969"/>
+    </marker>
+    <style>
+      .eyebrow { font: 600 20px Inter, Segoe UI, Arial, sans-serif; letter-spacing: 5px; fill: #64e6d2; }
+      .h1 { font: 750 64px Inter, Segoe UI, Arial, sans-serif; fill: #f5f7fa; }
+      .sub { font: 400 25px Inter, Segoe UI, Arial, sans-serif; fill: #aab3c2; }
+      .north { font: 650 30px Inter, Segoe UI, Arial, sans-serif; fill: #f5f7fa; }
+      .northsub { font: 400 23px Inter, Segoe UI, Arial, sans-serif; fill: #bdc6d3; }
+      .phaseNo { font: 800 52px Inter, Segoe UI, Arial, sans-serif; fill: #f5f7fa; }
+      .phaseLabel { font: 650 17px Inter, Segoe UI, Arial, sans-serif; letter-spacing: 3px; fill: #9ca8b8; }
+      .phaseTitle { font: 700 31px Inter, Segoe UI, Arial, sans-serif; fill: #f5f7fa; }
+      .phaseDate { font: 600 18px Inter, Segoe UI, Arial, sans-serif; fill: #64e6d2; }
+      .question { font: 600 21px Inter, Segoe UI, Arial, sans-serif; fill: #dfe5ec; }
+      .body { font: 400 18px Inter, Segoe UI, Arial, sans-serif; fill: #aab3c2; }
+      .gateLabel { font: 650 15px Inter, Segoe UI, Arial, sans-serif; letter-spacing: 2px; fill: #aa7cff; }
+      .gate { font: 600 18px Inter, Segoe UI, Arial, sans-serif; fill: #ece8ff; }
+      .laneTitle { font: 700 22px Inter, Segoe UI, Arial, sans-serif; fill: #f5f7fa; }
+      .lane { font: 400 16px Inter, Segoe UI, Arial, sans-serif; fill: #aab3c2; }
+      .tiny { font: 500 15px Inter, Segoe UI, Arial, sans-serif; fill: #7f8a99; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="2650" fill="url(#bg)"/>
+  <circle cx="1435" cy="140" r="260" fill="#6b46c1" opacity="0.08"/>
+  <circle cx="150" cy="510" r="290" fill="#33d6bf" opacity="0.055"/>
+
+  <text x="100" y="105" class="eyebrow">PRODUCT ROADMAP · SEPTEMBER 2026</text>
+  <text x="100" y="185" class="h1">The Claim Layer</text>
+  <text x="100" y="255" class="h1">and Economic Inbox</text>
+  <text x="102" y="305" class="sub">Prove the primitive. Earn the network. Expand only when usage justifies it.</text>
+
+  <rect x="100" y="360" width="1400" height="185" rx="26" fill="#121822" stroke="#2a3544" stroke-width="2" filter="url(#shadow)"/>
+  <rect x="100" y="360" width="11" height="185" rx="5" fill="url(#accent)"/>
+  <text x="145" y="407" class="phaseLabel">NORTH STAR</text>
+  <text x="145" y="454" class="north">Funded value that can find the right person before their wallet is known.</text>
+  <text x="145" y="493" class="northsub">Capital + Gate + Availability + Settlement + Recovery</text>
+  <text x="145" y="525" class="tiny">Claimants use an inbox · Organizations use a console · Developers use an API · Protocols compose the rails</text>
+
+  <text x="100" y="620" class="phaseLabel">THE PATH</text>
+  <text x="100" y="657" class="sub">Each phase unlocks the next only after its exit gate is proven.</text>
+
+  <!-- timeline spine -->
+  <line x1="170" y1="720" x2="170" y2="2175" stroke="#303a48" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <!-- Phase 0 -->
+  <circle cx="170" cy="805" r="48" fill="#102b29" stroke="#64e6d2" stroke-width="4"/>
+  <text x="170" y="823" text-anchor="middle" class="phaseNo">0</text>
+  <rect x="255" y="700" width="1245" height="215" rx="24" fill="url(#phase0)" stroke="#2f5e58" stroke-width="2" filter="url(#shadow)"/>
+  <text x="300" y="744" class="phaseDate">NOW → OCT 7, 2026</text>
+  <text x="300" y="790" class="phaseTitle">Arc mainnet proof</text>
+  <text x="300" y="826" class="question">Can the Claim primitive work from funded campaign to final receipt?</text>
+  <text x="300" y="862" class="body">One Gate · Direct USDC · Issuer flow · Inbox lite · Expiry and reclaim · Public demo</text>
+  <text x="300" y="894" class="gateLabel">EXIT GATE</text>
+  <text x="445" y="894" class="gate">Working Arc mainnet app, public repo, correct replay and recovery behavior</text>
+
+  <!-- Phase 1 -->
+  <circle cx="170" cy="1035" r="48" fill="#132635" stroke="#6cc7ee" stroke-width="4"/>
+  <text x="170" y="1053" text-anchor="middle" class="phaseNo">1</text>
+  <rect x="255" y="930" width="1245" height="215" rx="24" fill="url(#phase1)" stroke="#32546b" stroke-width="2" filter="url(#shadow)"/>
+  <text x="300" y="974" class="phaseDate">OCT → NOV 2026</text>
+  <text x="300" y="1020" class="phaseTitle">External issuer pilot</text>
+  <text x="300" y="1056" class="question">Will a real organization fund it and will eligible people complete it?</text>
+  <text x="300" y="1092" class="body">Design partner · Controlled limits · Exact eligibility source · Operations and reconciliation</text>
+  <text x="300" y="1124" class="gateLabel">EXIT GATE</text>
+  <text x="445" y="1124" class="gate">Real participants settle; issuer reconciles, reclaims, and wants to repeat</text>
+
+  <!-- Phase 2 -->
+  <circle cx="170" cy="1265" r="48" fill="#1d2340" stroke="#8497ff" stroke-width="4"/>
+  <text x="170" y="1283" text-anchor="middle" class="phaseNo">2</text>
+  <rect x="255" y="1160" width="1245" height="215" rx="24" fill="url(#phase2)" stroke="#3f4975" stroke-width="2" filter="url(#shadow)"/>
+  <text x="300" y="1204" class="phaseDate">NOV 2026 → Q1 2027</text>
+  <text x="300" y="1250" class="phaseTitle">Trustworthy core product</text>
+  <text x="300" y="1286" class="question">Can issuers repeat and can claimants trust the experience?</text>
+  <text x="300" y="1322" class="body">Reliable inbox · Issuer console · Basic Gates · Direct/split settlement · Security review</text>
+  <text x="300" y="1354" class="gateLabel">EXIT GATE</text>
+  <text x="445" y="1354" class="gate">Repeat issuer plus independently reviewed custody and authorization path</text>
+
+  <!-- Phase 3 -->
+  <circle cx="170" cy="1495" r="48" fill="#2a2342" stroke="#aa7cff" stroke-width="4"/>
+  <text x="170" y="1513" text-anchor="middle" class="phaseNo">3</text>
+  <rect x="255" y="1390" width="1245" height="215" rx="24" fill="url(#phase3)" stroke="#57467c" stroke-width="2" filter="url(#shadow)"/>
+  <text x="300" y="1434" class="phaseDate">Q1 → Q2 2027</text>
+  <text x="300" y="1480" class="phaseTitle">Developer platform</text>
+  <text x="300" y="1516" class="question">Can another application integrate Claims without private help?</text>
+  <text x="300" y="1552" class="body">REST API · TypeScript SDK · Webhooks · Embeds · Sandbox · Circle integrations where useful</text>
+  <text x="300" y="1584" class="gateLabel">EXIT GATE</text>
+  <text x="445" y="1584" class="gate">Unaffiliated developer creates, renders, settles, and reconciles a Claim</text>
+
+  <!-- Phase 4 -->
+  <circle cx="170" cy="1725" r="48" fill="#30223d" stroke="#cf76d9" stroke-width="4"/>
+  <text x="170" y="1743" text-anchor="middle" class="phaseNo">4</text>
+  <rect x="255" y="1620" width="1245" height="215" rx="24" fill="#17151f" stroke="#66426e" stroke-width="2" filter="url(#shadow)"/>
+  <text x="300" y="1664" class="phaseDate">Q2 → Q3 2027</text>
+  <text x="300" y="1710" class="phaseTitle">Composable Claims network</text>
+  <text x="300" y="1746" class="question">Can external verifiers and financial venues extend the system safely?</text>
+  <text x="300" y="1782" class="body">Resolver registry · Composite Gates · Settlement Router · Swap adapters · Multiple operators</text>
+  <text x="300" y="1814" class="gateLabel">EXIT GATE</text>
+  <text x="445" y="1814" class="gate">External resolver and external application generate correct repeat usage</text>
+
+  <!-- Phase 5 -->
+  <circle cx="170" cy="1955" r="48" fill="#33252f" stroke="#e189aa" stroke-width="4"/>
+  <text x="170" y="1973" text-anchor="middle" class="phaseNo">5</text>
+  <rect x="255" y="1850" width="1245" height="215" rx="24" fill="#19161c" stroke="#6c4658" stroke-width="2" filter="url(#shadow)"/>
+  <text x="300" y="1894" class="phaseDate">H2 2027+</text>
+  <text x="300" y="1940" class="phaseTitle">Long-lived and financial programs</text>
+  <text x="300" y="1976" class="question">Which deeper economic workflows have earned the right to exist?</text>
+  <text x="300" y="2012" class="body">Milestone grants · Bounties · Tranches · Streams · Recurring Claims · Reviewed LP/vault routes</text>
+  <text x="300" y="2044" class="gateLabel">EXIT GATE</text>
+  <text x="445" y="2044" class="gate">A multi-stage program runs for months without manual treasury transfers</text>
+
+  <!-- Phase 6 -->
+  <circle cx="170" cy="2185" r="48" fill="#2b292d" stroke="#efc187" stroke-width="4"/>
+  <text x="170" y="2203" text-anchor="middle" class="phaseNo">6</text>
+  <rect x="255" y="2080" width="1245" height="215" rx="24" fill="#191817" stroke="#6e5a43" stroke-width="2" filter="url(#shadow)"/>
+  <text x="300" y="2124" class="phaseDate">2028+ · EARNED THROUGH USAGE</text>
+  <text x="300" y="2170" class="phaseTitle">Economic addressing layer</text>
+  <text x="300" y="2206" class="question">Can Claims become portable infrastructure across ecosystems?</text>
+  <text x="300" y="2242" class="body">Cross-chain reach · Private proofs · Wallet-native inboxes · Agent Claims · Open markets</text>
+  <text x="300" y="2274" class="gateLabel">EXIT GATE</text>
+  <text x="445" y="2274" class="gate">Independent issuers, apps, wallets, resolvers, and venues rely on the standard</text>
+
+  <!-- Parallel lanes -->
+  <text x="100" y="2380" class="phaseLabel">PARALLEL WORKSTREAMS · RUN THROUGH EVERY PHASE</text>
+
+  <rect x="100" y="2410" width="330" height="145" rx="20" fill="#111720" stroke="#2a3544"/>
+  <rect x="450" y="2410" width="330" height="145" rx="20" fill="#111720" stroke="#2a3544"/>
+  <rect x="800" y="2410" width="330" height="145" rx="20" fill="#111720" stroke="#2a3544"/>
+  <rect x="1150" y="2410" width="350" height="145" rx="20" fill="#111720" stroke="#2a3544"/>
+
+  <text x="125" y="2450" class="laneTitle">Security</text>
+  <text x="125" y="2482" class="lane">Threat model → tests → review</text>
+  <text x="125" y="2510" class="lane">→ limited value → audit</text>
+  <text x="125" y="2538" class="tiny">Value limits follow evidence.</text>
+
+  <text x="475" y="2450" class="laneTitle">Distribution</text>
+  <text x="475" y="2482" class="lane">Interviews → pilot → repeat</text>
+  <text x="475" y="2510" class="lane">→ partners → self-serve</text>
+  <text x="475" y="2538" class="tiny">Second program beats signups.</text>
+
+  <text x="825" y="2450" class="laneTitle">Brand + company</text>
+  <text x="825" y="2482" class="lane">Positioning → name → identity</text>
+  <text x="825" y="2510" class="lane">→ operations → legal</text>
+  <text x="825" y="2538" class="tiny">Brand follows a stable journey.</text>
+
+  <text x="1175" y="2450" class="laneTitle">Capital + ecosystem</text>
+  <text x="1175" y="2482" class="lane">Crecimiento → Microgrant</text>
+  <text x="1175" y="2510" class="lane">→ Circle Grant → Builders Fund</text>
+  <text x="1175" y="2538" class="tiny">Each application uses new proof.</text>
+
+  <rect x="100" y="2585" width="1400" height="2" fill="url(#accent)" opacity="0.7"/>
+  <text x="100" y="2625" class="tiny">Decision rule at every gate: proceed · repeat · narrow · redesign</text>
+  <text x="1500" y="2625" text-anchor="end" class="tiny">Full detail: docs/product-roadmap.md</text>
+</svg>
