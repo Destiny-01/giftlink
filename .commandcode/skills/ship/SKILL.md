@@ -18,8 +18,12 @@ Deliver issue `#$issue` end to end. Never merge the PR.
 
 ## 2. Isolate the work
 
-- Create a worktree and branch off the current `main`: `feat/$issue-<slug>`, where
-  `<slug>` is a short kebab-case summary of the issue title.
+- Fetch the latest remote state before branching: `git fetch origin`.
+- Create a worktree and branch `feat/$issue-<slug>` based on the current `origin/main`,
+  not a possibly stale local `main`. `<slug>` is a short kebab-case summary of the
+  issue title.
+- Record the feature base for later diffing: `git rev-parse origin/main`. Every review
+  diff is taken relative to this base.
 - Work only in that worktree.
 
 ## 3. Understand before writing
@@ -48,13 +52,21 @@ Deliver issue `#$issue` end to end. Never merge the PR.
 
 ## 6. Review
 
-- Invoke the `code-reviewer` agent with the issue reference and the diff (`git diff
-  main...HEAD`).
+- Build the complete current implementation diff **relative to the feature base**
+  recorded in step 2 - not `main...HEAD`. The reviewer runs before the final commit, so
+  the diff must include committed, staged, and unstaged feature changes:
+  - `git add -N .` so new files appear in the diff,
+  - `git diff <base>`.
+- Invoke the `code-reviewer` agent. It is read-only and has no `gh` access, so pass it
+  the complete contract inline, never a GitHub reference:
+  - the issue number, title, body, and acceptance criteria,
+  - the complete diff from the previous step.
+  The reviewer may then inspect surrounding repository files itself.
 - Fix every BLOCKING finding and every IMPORTANT finding that is justified. You may
   reject an IMPORTANT finding with a clear reason, but say so in the PR summary.
 - Rerun the affected checks after fixing.
 - If you made substantial corrections, allow at most one additional `code-reviewer`
-  pass. Do not loop.
+  pass, re-supplying the same full contract and re-derived diff. Do not loop.
 
 ## 7. Deliver
 

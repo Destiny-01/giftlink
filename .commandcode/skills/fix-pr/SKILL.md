@@ -15,6 +15,9 @@ merge.
 - Resolve the PR if `$pr` is empty: `gh pr view --json number,title,body,headRefName`.
 - Read the PR, all review comments and review threads, and the relevant CI state
   (`gh pr checks`).
+- Fetch the linked issue (from the PR body's `Closes #<n>`) and keep its title, body,
+  and acceptance criteria. The reviewer cannot fetch it itself, so you must pass the
+  contract along.
 - Make sure you are on the PR's branch with its latest commits.
 
 ## 2. Triage
@@ -38,7 +41,15 @@ merge.
 
 ## 5. Review
 
-- Invoke the `code-reviewer` agent with the PR reference and the diff.
+- Build the complete current diff relative to the PR base, covering committed, staged,
+  and unstaged changes: `git add -N .`, then `git diff <base>` where `<base>` is the PR's
+  base commit (e.g. `git merge-base origin/main HEAD`).
+- Invoke the `code-reviewer` agent. It is read-only and has no `gh` access, so pass the
+  contract and context inline, never a GitHub reference:
+  - the linked issue's title, body, and acceptance criteria,
+  - the relevant PR description and the review comments being addressed,
+  - the complete diff from the previous step.
+  The reviewer may then inspect surrounding repository files itself.
 - Fix material findings, then rerun the affected checks.
 
 ## 6. Deliver
