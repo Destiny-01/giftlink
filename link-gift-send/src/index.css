@@ -2,71 +2,68 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* Self-hosted approved fonts. See brand/approved/GUIDELINES.md and brand/approved/tokens.css. */
+
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("/fonts/InstrumentSans.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  src: url("/fonts/IBMPlexMono-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Definition of the design system. All colors MUST be HSL. */
 
 @layer base {
   :root {
-    /* Base colors - DeFi theme */
-    --background: 212 73% 10%; /* #071029 deep navy */
-    --surface: 215 68% 7%; /* #0b1220 near-black */
-    --muted: 200 50% 14%; /* #0f2a3a */
+    /* Nomine 1.0.0 tokens, translated from brand/approved/tokens.css into HSL. */
+    --background: 240 8% 5%; /* Onyx #0B0B0D */
+    --surface: 240 1% 10%; /* Dark surface #19191C */
+    --muted: 240 1% 14%;
 
-    --foreground: 200 45% 92%; /* #E6F0F6 off-white */
-    --muted-foreground: 207 27% 68%; /* #9FB3C8 */
+    --foreground: 42 29% 93%; /* Warm ivory #F3F0E9 */
+    --muted-foreground: 40 6% 71%; /* Dark secondary text #B9B6B0 */
 
-    /* Accent colors */
-    --accent: 170 100% 50%; /* #00FFD1 electric teal */
-    --accent-2: 162 70% 65%; /* #6CE7B5 soft teal */
-    --accent-foreground: 212 73% 10%;
+    /* Deep violet #5546D9 for controls; pale violet #B7AEFF for dark accents. */
+    --accent: 246 66% 56%;
+    --accent-2: 247 100% 84%;
+    --accent-foreground: 0 0% 100%;
 
-    --gold: 45 100% 70%; /* #FFD166 */
+    --primary: 246 66% 56%;
+    --primary-foreground: 0 0% 100%;
 
-    --primary: 170 100% 50%;
-    --primary-foreground: 212 73% 10%;
+    --secondary: 240 1% 14%;
+    --secondary-foreground: 42 29% 93%;
 
-    --secondary: 207 27% 68%;
-    --secondary-foreground: 200 45% 92%;
+    /* States use wording and icons first; violet marks verified outcomes. */
+    --success: 247 100% 84%;
+    --danger: 0 72% 68%;
 
-    /* Status colors */
-    --success: 142 71% 58%; /* #4ADE80 */
-    --danger: 0 100% 71%; /* #FF6B6B */
+    --destructive: 0 72% 68%;
+    --destructive-foreground: 42 29% 93%;
 
-    --destructive: 0 100% 71%;
-    --destructive-foreground: 200 45% 92%;
+    --card: 240 1% 10%;
+    --card-foreground: 42 29% 93%;
 
-    /* UI elements */
-    --card: 215 68% 7%;
-    --card-foreground: 200 45% 92%;
+    --popover: 240 1% 10%;
+    --popover-foreground: 42 29% 93%;
 
-    --popover: 215 68% 7%;
-    --popover-foreground: 200 45% 92%;
+    /* Rule #434347 is decorative; #B9B6B0 marks essential control boundaries. */
+    --border: 240 1% 27%;
+    --input: 40 6% 71%;
+    --ring: 247 100% 84%;
 
-    --border: 0 0% 100% / 0.04;
-    --input: 0 0% 100% / 0.08;
-    --ring: 170 100% 50%;
+    --radius: 0.1875rem;
 
-    --radius: 0.75rem;
-
-    /* Gradients */
-    --gradient-hero: linear-gradient(
-      120deg,
-      rgba(0, 255, 209, 0.12),
-      rgba(102, 231, 181, 0.06)
-    );
-    --gradient-accent: linear-gradient(
-      135deg,
-      hsl(var(--accent)),
-      hsl(var(--accent-2))
-    );
-
-    /* Shadows */
-    --shadow-card: 0 6px 30px rgba(1, 8, 16, 0.6);
-    --shadow-glow: 0 0 40px rgba(0, 255, 209, 0.15);
-
-    /* Animations */
-    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-smooth: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   }
 }
 
@@ -77,6 +74,11 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family:
+      "Instrument Sans",
+      system-ui,
+      -apple-system,
+      sans-serif;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
@@ -86,7 +88,7 @@ All colors MUST be HSL.
   h4,
   h5,
   h6 {
-    @apply font-bold;
+    @apply font-medium;
   }
 
   h1 {
@@ -99,6 +101,22 @@ All colors MUST be HSL.
 
   h3 {
     @apply text-xl md:text-2xl;
+  }
+
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -127,15 +145,5 @@ All colors MUST be HSL.
   .custom-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--muted)) hsl(var(--surface));
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border;
-  }
-
-  body {
-    @apply bg-background text-foreground;
   }
 }
