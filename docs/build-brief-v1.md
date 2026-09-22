@@ -158,7 +158,7 @@ The implementation should document which Circle components are used. Arc and USD
 - A full external SDK and webhook platform.
 - Agent-issued Claims.
 - Protocol token or governance.
-- A complete rebrand.
+- A complete rebrand. Applying the approved Nomine identity to the new Claim Core surfaces is not this item: the identity is settled (D-016, D-017) and may be applied without expanding V1 or requiring a full GiftLink makeover first (D-018). A complete legacy restyle and public relaunch remain out of scope.
 - Meaningful-value production custody before independent contract review.
 
 These remain part of the product roadmap. They are not acceptance requirements for this build.
