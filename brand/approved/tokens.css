@@ -1,0 +1,14 @@
+/* Nomine 1.0.0. Copy with the font files; adjust only their relative URLs. */
+@font-face{font-family:'Instrument Sans';src:url('../assets/fonts/InstrumentSans.ttf') format('truetype');font-weight:400 700;font-style:normal;font-display:swap}
+@font-face{font-family:'IBM Plex Mono';src:url('../assets/fonts/IBMPlexMono-Regular.ttf') format('truetype');font-weight:400;font-style:normal;font-display:swap}
+:root{
+ --nomine-onyx:#0B0B0D;--nomine-ivory:#F3F0E9;--nomine-limestone:#E5E1D8;
+ --nomine-graphite:#6B6B72;--nomine-violet:#665CF6;--nomine-action:#5546D9;--nomine-pale-violet:#B7AEFF;
+ --nomine-bg:var(--nomine-ivory);--nomine-surface:var(--nomine-limestone);--nomine-text:var(--nomine-onyx);
+ --nomine-muted:var(--nomine-graphite);--nomine-rule:#CBC7BF;--nomine-control-border:#6B6B72;
+ --nomine-on-action:#FFFFFF;--nomine-accent-text:var(--nomine-action);--nomine-focus:var(--nomine-action);
+ --nomine-font:'Instrument Sans',Arial,sans-serif;--nomine-mono:'IBM Plex Mono',monospace;
+ --nomine-radius:3px;--nomine-max-width:1200px;
+ --nomine-space-1:4px;--nomine-space-2:8px;--nomine-space-3:12px;--nomine-space-4:16px;--nomine-space-6:24px;--nomine-space-8:32px;--nomine-space-12:48px;--nomine-space-16:64px;--nomine-space-24:96px;
+}
+[data-nomine-theme='dark']{--nomine-bg:var(--nomine-onyx);--nomine-surface:#19191C;--nomine-text:var(--nomine-ivory);--nomine-muted:#B9B6B0;--nomine-rule:#434347;--nomine-control-border:#B9B6B0;--nomine-accent-text:var(--nomine-pale-violet);--nomine-focus:var(--nomine-pale-violet)}

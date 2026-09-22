@@ -61,3 +61,19 @@ A working deployment or successful demonstration is not a security audit. Mainne
 ## D-015 — The current scope has no protocol token or open execution market
 
 The current product does not require a protocol token, token governance, permissionless Resolver market, permissionless solver market, or unrestricted settlement adapters.
+
+## D-016 — Nomine is the parent brand
+
+The Claim Layer and economic inbox use **Nomine** as their parent brand, with the master line **“Value, addressed.”** The principal surfaces are Nomine Inbox, Nomine Studio, and Nomine Protocol. The original gifting application remains a focused product called **GiftLink by Nomine** rather than defining the boundary of the broader system.
+
+## D-017 — Original Claim Register is the canonical Nomine identity
+
+The approved symbol is the original rectangular-block Claim Register from the first brand review (route 03). The later sliced diagonal N was explicitly rejected. The round-02 palette, typography and overall application aesthetic were approved. Implementation uses `brand/IMPLEMENTATION.md` and `brand/approved/`, including canonical SVGs unchanged, outlined wordmark lockups, local fonts and shared colour tokens. Explorations are historical and must not be used as production logo sources. Applying the brand does not expand product scope or change custody guarantees.
+
+## D-018 — Nomine evolves the existing codebase around a new Claim Core
+
+Nomine is developed as a distinct Claim Layer product within the existing repository, reusing validated application foundations from GiftLink. The legacy custody contract, authorization assumptions, and scattered lifecycle state are not inherited as the new Claim Core. Nomine Inbox and Studio are built around the fixed-allocation campaign flow defined in the current build brief.
+
+The first work package is a foundation audit and implementation brief: map the existing flows, identify what to retain, repair, or replace, and define the campaign lifecycle and acceptance criteria before implementation. Material product and architectural choices are resolved with the product architect; implementation mechanics belong to the implementation agent.
+
+The approved Nomine identity may be applied to the new product flow without making a complete GiftLink makeover a prerequisite or expanding V1. GiftLink remains a focused application, GiftLink by Nomine; migration of legacy records, links, and custody requires an explicit plan and is not implied by a name change.

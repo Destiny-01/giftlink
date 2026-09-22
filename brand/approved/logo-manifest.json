@@ -1,0 +1,15 @@
+{
+  "version": "1.0.0",
+  "approvedSymbolSource": "round-01 route 03 Claim Register; original coordinates unchanged",
+  "rejected": "round-02 sliced diagonal N",
+  "symbolPath": "M8 9H20V21H8ZM8 26H20V38H8ZM8 43H20V55H8ZM44 9H56V21H44ZM44 26H56V38H44ZM44 43H56V55H44ZM20 9H29V21H20ZM27 26H37V38H27ZM35 43H44V55H35Z",
+  "files": {
+    "nomine-avatar-ink.svg": "a6b9f0599f5e3a744c9b7edc3672360b36030331810014052bb0ced23558fe0c",
+    "nomine-avatar-ivory.svg": "22651ec13fe192274c9cc4a15da23ceef74ade17f59f63d65f83016cbd81e3c2",
+    "nomine-favicon.svg": "2905fd732d98919b188e977314d3734e595405e1cd650e37a984f0a979caf9ea",
+    "nomine-lockup-ink.svg": "a9a5254d59bfa94660cf5eaf1421a380f7beb28656d2d1403ae6060fd9116150",
+    "nomine-lockup-ivory.svg": "0169b342475d141f43078833f0e45cc5c7b43e434bc939ac98642fcb510b1a8f",
+    "nomine-symbol-ink.svg": "bfafd7c78767f608011c75782779a9a5bdffc084167db8797ea9b9a4201ae3cb",
+    "nomine-symbol-ivory.svg": "cce6f550965eaaccb33b04d635cf1eecd39d9767f54a95f95e2e1940e59f2379"
+  }
+}

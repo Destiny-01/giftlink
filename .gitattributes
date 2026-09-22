@@ -1,0 +1,8 @@
+# Canonical brand assets are validated by SHA-256 over their raw bytes
+# (`node brand/verify-assets.mjs`). Line-ending normalisation would change
+# those bytes on checkout and break the manifest check, so they are stored
+# exactly as approved.
+brand/**/*.svg -text
+brand/**/*.ttf binary
+link-gift-send/public/brand/*.svg -text
+link-gift-send/public/fonts/*.ttf binary
