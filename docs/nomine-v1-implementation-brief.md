@@ -191,7 +191,7 @@ Three states only (R10), each derived from the facts above — never from a data
 
 | Inbox state | Derived from | Copy obligation |
 | --- | --- | --- |
-| **Available** | the claim is funded and addressed to this viewer (`Eligible` or `Authorized`), and this entitlement can still settle | show issuer, amount, asset, network, eligibility verifier, expiry **with timezone**, recovery rule |
+| **Available** | the claim is funded and addressed to this viewer, and this entitlement is unsettled with settlement still possible — `Eligible`, `Authorized`, or `SettlementPending` | show issuer, amount, asset, network, eligibility verifier, expiry **with timezone**, recovery rule; for `SettlementPending`, show the submitted transaction as unconfirmed and never as `Completed` (§3.3) |
 | **Completed** | entitlement `Settled` on-chain, receipt decodable | show settled amount and the transaction reference |
 | **Expired** | this entitlement will never settle because the campaign's declared expiry passed with it unsettled | state the expiry and that unused capital returns under the recovery rule fixed at funding |
 
@@ -203,8 +203,9 @@ material product semantics — it changes what "Available" and "Expired" mean to
 does not prescribe it. The proposal under Q9 is to present the pre-opening claim as `Available` with the
 opening time stated, and the post-exhaustion claim as `Expired` with fully-allocated copy. §3.5 is written
 on that basis and marks those two cells as proposed. Q9 must be resolved in `docs/DECISIONS.md` before the
-Inbox boundary presentation is implemented (§7 Phase D, §12 item 12). No fourth state is introduced
-either way.
+Inbox boundary presentation is implemented (§7 Phase D, §12 item 12). The proposal in (a) introduces no
+fourth state; option (c) would require R10 itself to be revisited, which is precisely why it is a product
+decision rather than an implementation detail.
 
 `Available` is a lifecycle state, not a claim that the viewer personally qualifies. A funded campaign
 the viewer is not part of is not shown in their Inbox at all.
@@ -214,7 +215,7 @@ the viewer is not part of is not shown in their Inbox at all.
 | Situation | Behaviour | Why it does not add a state |
 | --- | --- | --- |
 | Before opening (`Funded, not yet open`) | **Settled:** settlement is refused until opening. **Proposal (Q9):** the claim is presented as `Available` with the opening time stated. | Either way this is a time-gate on the action, not a fourth state |
-| After budget exhaustion (`Exhausted`) | **Settled:** settlement is refused, and this entitlement can no longer settle. **Proposal (Q9):** remaining eligible identities are presented as `Expired` with fully-allocated copy. Any remainder from a non-divisible budget stays in escrow until expiry, when the reclaim returns it under the fixed recovery rule. | Either way no fourth state is required; which label carries it is the open question, not the behaviour |
+| After budget exhaustion (`Exhausted`) | **Settled:** settlement is refused, this entitlement can no longer settle, and any remainder from a non-divisible budget stays in escrow until expiry, when the reclaim returns it under the fixed recovery rule. **Proposal (Q9):** remaining eligible identities are presented as `Expired` with fully-allocated copy. | Either way no fourth state is required; which label carries it is the open question, not the behaviour |
 | Between exhaustion and expiry | Nothing is offered; no queue, no waitlist, no partial allocation | R2/R3 forbid partial settlement |
 | After expiry, unsettled | `Expired` with the recovery statement | Terminal |
 | After reclaim | Nothing offered | Reclaim is an issuer-side fact, not a claimant state |
@@ -384,8 +385,8 @@ Build the minimal contract defined in the build brief. Deliverables:
   does not open an earlier path: the remainder of a non-divisible budget waits in escrow with everything
   else and is returned here, so it needs no separate recovery mechanism.
 - Canonical events: campaign created, funded, settled, reclaimed. There is deliberately no
-  `reclaim-enabled` event: expiry is derived from the funding timestamp, so it creates no transition to
-  emit.
+  `reclaim-enabled` event: expiry is a fact fixed at funding, and the clock passing it creates no
+  transition to emit.
 - **No owner sweep function at all.** The absence is the guarantee (R5).
 
 Depends on: nothing technically — this is the root dependency for everything else. But **Q6 must be
@@ -609,8 +610,8 @@ The V1 proof is complete only when all of the following are true and evidenced:
     signer: **Q6 is resolved in `docs/DECISIONS.md`**, the deployed mechanism matches that record, and the
     residual trusted-operation exposure is stated in the reviewer documentation (§4, §6).
 12. The Inbox's boundary presentation follows a resolved **Q9** record: claims before opening and claims
-    in an exhausted campaign are presented as the architect decided, the three states are unchanged, and
-    settlement is refused in both windows (§3.4).
+    in an exhausted campaign are presented as the architect decided, the three states are unchanged unless
+    R10 is amended by that same decision, and settlement is refused in both windows (§3.4).
 
 Arc **mainnet** deployment and any real-fund spending require separate explicit approval (D-014), and
 independent review before value limits increase.
