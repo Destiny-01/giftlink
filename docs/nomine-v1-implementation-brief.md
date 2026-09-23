@@ -49,8 +49,9 @@ The first campaign is the smallest thing that proves the loop. It has exactly on
   multiple of the allocation therefore leaves a **remainder** — `budget − cap × allocation`, always less
   than one allocation — which can never be settled. The remainder is not forfeited: it is part of the
   recoverable balance and is returned under the recovery rule (§3.1, I2, §11 row 29). Requiring exact
-  divisibility at funding is an acceptable simplification instead, but it must be one or the other, not
-  left undefined.
+  divisibility at funding would be a simpler alternative, but it is **not** the chosen rule: the
+  remainder path above is the specification. Funding must additionally satisfy `budget >= allocation`,
+  so that `cap >= 1` and a campaign is never created unable to settle anything.
 - **One eligibility set:** a single declared private allowlist resolved by a named Resolver.
 - **One opening time and one expiry time**, both fixed at funding.
 - **One recovery rule**, fixed at funding.
@@ -76,17 +77,25 @@ is only that no stored status may disagree with chain facts.) The legacy contrac
 column and an hourly job (`link-backend/src/jobs/expireDropsJob.ts:6-52`) — and the audit found the two
 can disagree. Instead, store **facts** and derive the phase from facts plus the clock:
 
-Stored facts: `fundedAmount`, `settledAmount`, `settlementCount`, `allocation`, `openingTime`,
-`expiryTime`, `reclaimedAmount`, plus per-entitlement nullifier consumption. `cap` is deliberately
-**not** stored: it is already determined by the funded amount and the allocation, and a stored copy
-would be one more value that can disagree with the facts.
+Stored facts: `fundedAmount`, `settlementCount`, `allocation`, `openingTime`, `expiryTime`, whether the
+reclaimable balance has been returned, plus per-entitlement nullifier consumption. Nothing else is
+stored. `cap`, the remainder, the settled total and the reclaimable total are all determined by those
+facts, and a stored copy of any of them would be one more value that can disagree with the chain.
 
 Derived, so that no separate stored value can disagree with the facts:
 
+- `cap = floor(fundedAmount / allocation)`
 - `allocatedTotal = cap × allocation`
 - `remainder = fundedAmount − allocatedTotal` — never settleable, always `< allocation`
+- `settledAmount = settlementCount × allocation` — exact, because every settlement transfers exactly
+  `allocation` (I3)
 - `remainingUnsettled = (cap − settlementCount) × allocation`
 - `reclaimable = fundedAmount − settledAmount = remainder + remainingUnsettled`
+- `reclaimedAmount` = the `reclaimable` value at the moment reclaim executed, fixed thereafter
+
+The reclaim flag is the one piece of state that cannot be derived: once the remainder reaches zero, a
+fully settled campaign and a reclaimed one both hold nothing, so the contract must record that reclaim
+happened rather than infer it.
 
 Funding must also satisfy `fundedAmount >= allocation`, so that `cap >= 1` and the campaign is not
 born unable to settle anything. Without that guard a budget below one allocation yields `cap == 0`,
@@ -310,8 +319,8 @@ precede the new contract.**
 Build the minimal contract defined in the build brief. Deliverables:
 
 - Campaign struct holding: issuer, USDC asset, funded amount, allocation, gate commitment,
-  declared Resolver, opening time, expiry time, settlement count, reclaimed amount. `cap` is derived as
-  `floor(fundedAmount / allocation)` and the remainder as `fundedAmount % allocation`, so neither is a
+  declared Resolver, opening time, expiry time, settlement count, and a reclaim flag. `cap`, the
+  remainder, and the settled and reclaimable totals are derived exactly as in §3.1, so none of them is a
   stored field: storing them would only create something that can disagree with the facts. Funding
   requires `fundedAmount >= allocation` so that `cap >= 1` (§3.1).
 - `settle(entitlementNullifier, claimant, amount, deadline, nonce, signature)` with EIP-712 domain
@@ -495,11 +504,11 @@ database alone.
 | 30 | Trust boundary: a compromised signer applies its authorized role to a **different wallet** than the claimant selected | **Not prevented on-chain.** The contract cannot detect it, because the wallet is an input to the signed data. Recorded as a trusted-operation assumption with the mitigations in Q6/Q1, not as a passing test. No interface may claim otherwise | Trust boundary (documented, not a pass/fail test) |
 | 31 | Trust boundary: a compromised signer issues a second authorization for an entitlement that should not be settleable | **Not prevented on-chain** for the same reason. Single-use still holds once a nullifier is consumed, so the damage is bounded to unconsumed entitlements. Recorded as a trusted-operation assumption with the mitigations in Q6/Q1 | Trust boundary (documented, not a pass/fail test) |
 
-Rows 2–17, 24 and 29 are adversarial or boundary; rows 19–23 are recovery; rows 30–31 are trust
-boundaries that must be documented rather than tested, because the contract cannot enforce them; rows
-18, 25–28 are failure-path, invariant, and product-assertion rows. All are required — the build brief
-lists ten, and this matrix extends them to cover the failures the audit found in the legacy system's own
-claim path and the guarantees the contract cannot provide.
+Row 1 is the primary happy path; rows 2–17, 24 and 29 are adversarial or boundary; rows 19–23 are
+recovery; rows 30–31 are trust boundaries that must be documented rather than tested, because the
+contract cannot enforce them; rows 18 and 25–28 are invariant, failure-path and product-assertion rows.
+All are required — the build brief lists ten, and this matrix extends them to cover the failures the
+audit found in the legacy system's own claim path and the guarantees the contract cannot provide.
 
 ---
 
