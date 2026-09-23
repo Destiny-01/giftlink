@@ -76,8 +76,10 @@ is only that no stored status may disagree with chain facts.) The legacy contrac
 column and an hourly job (`link-backend/src/jobs/expireDropsJob.ts:6-52`) — and the audit found the two
 can disagree. Instead, store **facts** and derive the phase from facts plus the clock:
 
-Facts: `fundedAmount`, `settledAmount`, `settlementCount`, `allocation`, `cap`, `openingTime`,
-`expiryTime`, `reclaimedAmount`, plus per-entitlement nullifier consumption.
+Stored facts: `fundedAmount`, `settledAmount`, `settlementCount`, `allocation`, `openingTime`,
+`expiryTime`, `reclaimedAmount`, plus per-entitlement nullifier consumption. `cap` is deliberately
+**not** stored: it is already determined by the funded amount and the allocation, and a stored copy
+would be one more value that can disagree with the facts.
 
 Derived, so that no separate stored value can disagree with the facts:
 
@@ -85,6 +87,11 @@ Derived, so that no separate stored value can disagree with the facts:
 - `remainder = fundedAmount − allocatedTotal` — never settleable, always `< allocation`
 - `remainingUnsettled = (cap − settlementCount) × allocation`
 - `reclaimable = fundedAmount − settledAmount = remainder + remainingUnsettled`
+
+Funding must also satisfy `fundedAmount >= allocation`, so that `cap >= 1` and the campaign is not
+born unable to settle anything. Without that guard a budget below one allocation yields `cap == 0`,
+which makes settlement impossible from the start and makes reclaim immediately available — coherent
+arithmetically, but a degenerate campaign that should be rejected at funding instead.
 
 Derived campaign phase:
 
@@ -209,8 +216,11 @@ Two cases must be kept apart:
 
 Closing that second gap is an architectural decision, not an implementation mechanic. The available
 mechanisms are a campaign-scoped signer key with rotation (Q6), threshold or multi-party signing (Q6),
-and committing the eligibility set at funding so that a wrongly derived nullifier is detectable against
-the campaign's own Gate commitment (Q1). Until one is chosen, the honest statement is: **custody and
+and committing the eligibility set at funding (Q1) so that a nullifier belonging to no eligible
+entitlement is detectable. That last mitigation is conditional and partial: it requires the Gate
+commitment to cover the entitlement nullifiers themselves and `settle()` to prove membership against it,
+neither of which the Phase A sketch includes, and it still cannot detect a nullifier swapped for a
+*different* eligible entitlement. Until one of these is chosen, the honest statement is: **custody and
 single-use are enforced by the contract; the correctness of each authorization is enforced by the
 signer.** No interface may describe the second as cryptographically guaranteed. Rows 30–31 of §11 record
 this as a trust boundary rather than a passing test.
@@ -299,10 +309,11 @@ precede the new contract.**
 
 Build the minimal contract defined in the build brief. Deliverables:
 
-- Campaign struct holding: issuer, USDC asset, funded amount, allocation, cap, gate commitment,
+- Campaign struct holding: issuer, USDC asset, funded amount, allocation, gate commitment,
   declared Resolver, opening time, expiry time, settlement count, reclaimed amount. `cap` is derived as
-  `floor(fundedAmount / allocation)`, and the remainder as `fundedAmount % allocation`; neither needs
-  separate storage, and storing them would only create something that can disagree with the facts.
+  `floor(fundedAmount / allocation)` and the remainder as `fundedAmount % allocation`, so neither is a
+  stored field: storing them would only create something that can disagree with the facts. Funding
+  requires `fundedAmount >= allocation` so that `cap >= 1` (§3.1).
 - `settle(entitlementNullifier, claimant, amount, deadline, nonce, signature)` with EIP-712 domain
   separation, nullifier consumption before transfer, and a fixed `allocation` transfer directly to the
   authorized wallet.
@@ -336,9 +347,12 @@ Reuse and repair, do not rewrite (`docs/foundation-audit.md` §3):
   (R7, I5). The legacy `syncDropsJob` query is unreachable in practice
   (`jobs/syncDropsJob.ts:16-27`), and `ENABLE_EVENT_LISTENER` is declared but unused
   (`config/env.ts:26`).
-- **Remove on sight:** the identity-token log at `middleware/auth.ts:30`, the browser token log at
-  `services/api.ts:69`, the permit-signature log at `dropService.ts:605`, and the private-identifier
-  log at `dropService.ts:331` (R8).
+- **Remove on sight:** every logging site identified in `docs/foundation-audit.md` §2.11 — the
+  identity-token log at `middleware/auth.ts:30`, the browser token log at `services/api.ts:69`, and the
+  permit-signature (`dropService.ts:605`), relayer-balance (`:609`), transaction-object (`:634`),
+  private-identifier (`:331`) and whole-user-record (`authService.ts:20`) logs. Alongside the two token
+  logs, the transaction-object and user-record logs matter most: they carry the still-live authorization
+  and raw identifiers respectively (R8).
 
 Depends on: Phase A (the nullifier and event shapes it must produce).
 
@@ -436,7 +450,7 @@ Each item is a **Proposal**, not a settled decision, and none has been recorded 
 | Q3 | **Recovery recipient semantics** | (a) always the issuer address; (b) a recovery destination fixed at funding and immutable; (c) a protocol default | (b) — matches "rules fixed when the campaign was created" and survives an issuer key change mid-campaign | Determines whether R6 is enforceable and whether ownership transfer is needed |
 | Q4 | **Gas sponsorship model** | (a) keep the existing relayer; (b) Circle Paymaster / App Kit; (c) claimant pays | (a) for the proof, with a per-settlement reimbursement cap (I8), since it already works and R9 only requires that the claimant not handle gas | Affects cost, trust, and whether the relayer becomes a payout authority (audit §2.2) |
 | Q5 | **Privacy commitments** — secret management, what is logged, retention | Not a binary choice; a policy is needed | No raw identifier, private eligibility record, or identity token in any log; authorization copies logged only where settlement and reconciliation require them, since the authorization is public calldata once submitted but is still live and single-use before that; commitments derived with a dedicated secret; documented retention | D-008 constrains public logs and on-chain data; the current gaps are in application logs (audit §2.11) |
-| Q6 | **Signer powers** — what the coordination signer may authorize | (a) one campaign-scoped signer per campaign; (b) a global signer; (c) threshold or multi-party signing | (a) with rotation for the proof, paired with committing the eligibility set at funding (Q1) so a wrongly derived nullifier is at least detectable; (c) if the value at stake justifies it | This is the **only** enforcement of authorization correctness. The contract verifies authenticity, single use, and domain binding, but cannot tell whether the signer chose the right nullifier or wallet (§4). It therefore resolves a residual gap in R4/R5, not just key hygiene |
+| Q6 | **Signer powers** — what the coordination signer may authorize | (a) one campaign-scoped signer per campaign; (b) a global signer; (c) threshold or multi-party signing | (a) with rotation for the proof, paired with committing the eligibility set at funding (Q1) so a nullifier belonging to no entitlement is detectable — conditional on the commitment covering the nullifiers and settlement proving membership (§4); (c) if the value at stake justifies it | This is the **only** enforcement of authorization correctness. The contract verifies authenticity, single use, and domain binding, but cannot tell whether the signer chose the right nullifier or wallet (§4). It therefore resolves a residual gap in R4/R5, not just key hygiene |
 | Q7 | **Upgradeability and migration** | (a) immutable contract per campaign; (b) upgradeable proxy; (c) immutable plus a successor deployment | (a), matching D-015's rejection of adapters and the "keep the contract small" instruction | Governs whether custody can be changed after funding, which interacts directly with R5 and R6 |
 
 ---
@@ -477,15 +491,15 @@ database alone.
 | 26 | Funding transaction reverted | Campaign is not shown as funded or available | Coordination |
 | 27 | Privacy assertion | No raw identifier, private eligibility record, or identity token appears on-chain, in public logs, or in API responses. The settlement authorization is **excluded**: it is submitted as public transaction calldata and is on-chain by design. Authorization copies must not be logged beyond what settlement and reconciliation require, and the authenticated authorization-delivery API is explicitly allowed | Privacy |
 | 28 | State distinction assertion | An unfunded campaign is never `Available`; an eligible-but-unopened claimant is never shown as settled; `Completed` requires a decodable settlement event | Product + E2E |
-| 29 | Non-divisible budget: fund an amount that is not a multiple of the allocation, settle to the cap | `cap == floor(funded / allocation)`; `remainder == funded % allocation` stays in escrow after exhaustion; settlement is refused; reclaim returns exactly `reclaimable`, and afterwards `funded == settled + reclaimed` with no stranded balance | Contract |
+| 29 | Budget divisibility boundary: (a) fund a non-multiple of the allocation and settle to the cap; (b) fund an exact multiple and settle to the cap; (c) attempt to fund less than one allocation | (a) `cap == floor(funded / allocation)`, `remainder == funded % allocation` stays in escrow after exhaustion, settlement is refused, reclaim returns exactly `reclaimable`, and `funded == settled + reclaimed` with no stranded balance. (b) `remainder == 0`; reclaim at the cap transfers 0 as a permitted no-op and does not re-enable settlement. (c) Rejected at funding, because `cap >= 1` is required | Contract |
 | 30 | Trust boundary: a compromised signer applies its authorized role to a **different wallet** than the claimant selected | **Not prevented on-chain.** The contract cannot detect it, because the wallet is an input to the signed data. Recorded as a trusted-operation assumption with the mitigations in Q6/Q1, not as a passing test. No interface may claim otherwise | Trust boundary (documented, not a pass/fail test) |
 | 31 | Trust boundary: a compromised signer issues a second authorization for an entitlement that should not be settleable | **Not prevented on-chain** for the same reason. Single-use still holds once a nullifier is consumed, so the damage is bounded to unconsumed entitlements. Recorded as a trusted-operation assumption with the mitigations in Q6/Q1 | Trust boundary (documented, not a pass/fail test) |
 
 Rows 2–17, 24 and 29 are adversarial or boundary; rows 19–23 are recovery; rows 30–31 are trust
-boundaries that must be documented rather than tested, because the contract cannot enforce them; the
-remainder are happy-path and invariant. All are required — the build brief lists ten, and this matrix
-extends them to cover the failures the audit found in the legacy system's own claim path and the
-guarantees the contract cannot provide.
+boundaries that must be documented rather than tested, because the contract cannot enforce them; rows
+18, 25–28 are failure-path, invariant, and product-assertion rows. All are required — the build brief
+lists ten, and this matrix extends them to cover the failures the audit found in the legacy system's own
+claim path and the guarantees the contract cannot provide.
 
 ---
 
@@ -509,9 +523,10 @@ The V1 proof is complete only when all of the following are true and evidenced:
    the consumed-nullifier set — can be rebuilt from canonical events, and the private dependencies they
    cannot reconstruct (eligibility set, identity mappings, secret material) have documented protected
    backup and restoration. After both, the projections match chain state and no resettlement is possible.
-8. No identity token, raw identifier, or private eligibility record appears in application logs, and
-   authorization copies are logged only where settlement and reconciliation require them; the four known
-   logging sites from the audit are gone.
+8. Every logging site identified in `docs/foundation-audit.md` §2.11 is gone: no identity token, raw
+   identifier, private eligibility record, or unnecessary authorization copy appears in application logs.
+   Authorization copies are retained only where settlement and reconciliation require them, and the
+   authenticated authorization-delivery API still works.
 9. Configuration has no silent fallbacks: a missing chain ID, RPC URL, contract address, or USDC
    address stops the application rather than defaulting.
 10. Reviewer documentation states what is proven and what is not. A passing demo is not an audit.
