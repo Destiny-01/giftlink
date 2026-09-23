@@ -114,7 +114,9 @@ A reviewer can watch an issuer fund USDC for verified members, see an eligible p
 
 ### Explicitly postponed
 
-Swaps, LP positions, milestones, cross-chain flows, external SDKs, open verifier markets, protocol token, and rebrand.
+Swaps, LP positions, milestones, cross-chain flows, external SDKs, open verifier markets, protocol token, and a complete legacy rebrand.
+
+Applying the approved Nomine identity to the new Claim Core surfaces is **not** this postponed item and does not require a full GiftLink makeover first. The name, master line and identity are settled in D-016 and D-017; D-018 permits applying them without expanding V1 scope. What remains postponed is the public relaunch and a complete restyle of the existing gifting application.
 
 ---
 
@@ -349,6 +351,8 @@ Product constitution → Positioning → Naming brief → Name/domain checks
 ```
 
 Rebranding begins after the V1 journey is stable enough to name the enduring product rather than the temporary implementation.
+
+**Reconciled:** the naming and identity steps are already settled. **Nomine** is the parent brand, the master line is "Value, addressed.", and the approved package lives in `brand/approved/` (D-016, D-017). Applying that approved identity to the new Claim Core surfaces while V1 is built is therefore no longer gated on V1 stability, and it does not expand V1 scope (D-018). A complete restyle of the existing gifting application, and the public launch system above, remain part of this later phase.
 
 ### Company and operations
 
