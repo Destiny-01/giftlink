@@ -101,7 +101,7 @@ The escrow balance and the cumulative `fundedAmount − settledAmount` are diffe
 not be conflated: after a reclaim the first is zero while the second stays non-zero for the rest of the
 campaign's life.
 
-The reclaim flag is the one piece of state that cannot be derived: once the remainder reaches zero, a
+The reclaim flag is the one piece of state that cannot be derived: when the remainder is zero, a
 fully settled campaign and a reclaimed one both hold nothing, so the contract must record that reclaim
 happened rather than infer it.
 
@@ -117,7 +117,7 @@ Derived campaign phase:
 | `Unfunded` | `fundedAmount == 0` | none |
 | `Funded, not yet open` | funded, `now < openingTime` | entire budget |
 | `Open` | funded, `openingTime <= now < expiryTime`, `settlementCount < cap` | `escrowBalance` |
-| `Exhausted` | funded, `settlementCount == cap` | `remainder` (may be 0) |
+| `Exhausted` | funded, `settlementCount == cap`, not reclaimed | `remainder` (may be 0) |
 | `Expired` | `now >= expiryTime`, not reclaimed | `escrowBalance` |
 | `Reclaimed` | the reclaimable balance has been returned per the recovery rule | 0 |
 
@@ -191,9 +191,15 @@ Three states only (R10), each derived from the facts above — never from a data
 
 | Inbox state | Derived from | Copy obligation |
 | --- | --- | --- |
-| **Available** | campaign `Open`, claimant `Eligible` or `Authorized` | show issuer, amount, asset, network, eligibility verifier, expiry **with timezone**, recovery rule |
+| **Available** | the campaign is funded and addressed to this viewer (`Eligible` or `Authorized`), their entitlement is unsettled and not past expiry, and settlement capacity remains (`settlementCount < cap`) | show issuer, amount, asset, network, eligibility verifier, expiry **with timezone**, recovery rule — plus the opening time, stating that settlement is not yet possible, until opening has passed |
 | **Completed** | entitlement `Settled` on-chain, receipt decodable | show settled amount and the transaction reference |
-| **Expired** | `now >= expiryTime` and this entitlement was never settled | state the expiry and that unused capital returns to the issuer |
+| **Expired** | this entitlement will never settle: it is unsettled, and either `now >= expiryTime` or the campaign's cap was reached first | state which applies — the declared expiry date, or that the campaign was fully allocated — and, when the expiry has passed, that unused capital returns under the recovery rule fixed at funding |
+
+`Available` means "this claimant can still settle" (R11) — availability is not the same as funding or
+eligibility — so it is not shown once capacity is gone. Putting a fully-allocated campaign into
+`Expired`'s copy rather than inventing a fourth state is the reading that keeps R10's three states; if the
+product wants that case worded or modelled differently, that is a product decision, not an implementation
+choice.
 
 `Available` is a lifecycle state, not a claim that the viewer personally qualifies. A funded campaign
 the viewer is not part of is not shown in their Inbox at all.
@@ -202,8 +208,8 @@ the viewer is not part of is not shown in their Inbox at all.
 
 | Situation | Behaviour | Why it does not add a state |
 | --- | --- | --- |
-| Before opening (`Funded, not yet open`) | Claim is visible with the opening time stated; settlement is refused. Availability is not yet true. | Resolves to `Available` once open, or to `Expired` if opening is never reached |
-| After budget exhaustion (`Exhausted`) | Settlement is refused; remaining eligible identities see the campaign as no longer available. Any remainder from a non-divisible budget stays in escrow until expiry, when the issuer's reclaim returns it. | Terminal for settlement, then `Expired`; the remainder is a recovery fact, not a fourth state |
+| Before opening (`Funded, not yet open`) | The claim appears as `Available` with the opening time stated; settlement is refused until opening. | A time-gate on the action inside `Available`, not a fourth state; if opening is never reached it becomes `Expired` |
+| After budget exhaustion (`Exhausted`) | Settlement is refused, and remaining eligible identities see their entitlement as `Expired` with fully-allocated copy, because it can no longer settle. Any remainder from a non-divisible budget stays in escrow until expiry, when the reclaim returns it under the fixed recovery rule. | It maps onto `Expired`'s meaning — this entitlement will never settle — so it needs no fourth state |
 | Between exhaustion and expiry | Nothing is offered; no queue, no waitlist, no partial allocation | R2/R3 forbid partial settlement |
 | After expiry, unsettled | `Expired` with the recovery statement | Terminal |
 | After reclaim | Nothing offered | Reclaim is an issuer-side fact, not a claimant state |
@@ -347,18 +353,21 @@ settlement from a client-supplied hash (`dropService.ts:697-703`).
 
 ## 7. Implementation sequence
 
-Bounded, each phase gated on the previous. Phases A–D are the minimum for the proof. The sequence
-deliberately puts correctness before surface: the audit found that the correct eligibility logic
-already exists but is wired to an unused path (`dropService.ts:370-424` versus `:501-583`), so
-**re-pointing the live claim path at strict verification is the first correctness win, and it can
-precede the new contract.**
+Bounded, each phase gated on the previous, with one deliberate exception noted below. Phases A–D are the
+minimum for the proof. The sequence deliberately puts correctness before surface: the audit found that
+the correct eligibility logic already exists but is wired to an unused path
+(`dropService.ts:370-424` versus `:501-583`), so **re-pointing the live claim path at strict verification
+is the first correctness win, and it can precede the new contract.** That one repair is the exception to
+the phase gating: it may ship before Phase A. Everything else depends on the phase before it.
 
 ### Phase A — Claim Core (contract + tests)
 
 Build the minimal contract defined in the build brief. Deliverables:
 
 - Campaign struct holding: issuer, USDC asset, funded amount, allocation, gate commitment,
-  declared Resolver, opening time, expiry time, settlement count, and a reclaim flag. `cap`, the
+  declared Resolver, opening time, expiry time, **recovery destination**, settlement count, and a reclaim
+  flag. The recovery destination is stored explicitly rather than assumed to be the issuer: `reclaim()`
+  pays it, `docs/PRODUCT.md:73` makes it a create-time input, and Q3 is not yet decided. `cap`, the
   remainder, and the settled and reclaimable totals are derived exactly as in §3.1, so none of them is a
   stored field: storing them would only create something that can disagree with the facts. Funding
   requires `fundedAmount >= allocation` so that `cap >= 1` (§3.1).
@@ -369,7 +378,9 @@ Build the minimal contract defined in the build brief. Deliverables:
   `reclaimable = fundedAmount − settledAmount` to the recovery destination fixed at funding. Exhaustion
   does not open an earlier path: the remainder of a non-divisible budget waits in escrow with everything
   else and is returned here, so it needs no separate recovery mechanism.
-- Canonical events: campaign created, funded, settled, reclaim-enabled, reclaimed.
+- Canonical events: campaign created, funded, settled, reclaimed. There is deliberately no
+  `reclaim-enabled` event: expiry is derived from the funding timestamp, so it creates no transition to
+  emit.
 - **No owner sweep function at all.** The absence is the guarantee (R5).
 
 Depends on: nothing technically — this is the root dependency for everything else. But **Q6 must be
@@ -377,7 +388,9 @@ resolved and recorded in `docs/DECISIONS.md` before Phase A is implemented**: th
 correct authorization, so a single compromised signer can spend the campaign's remaining capacity (§4,
 §6). Disclosure is not a substitute for the decision.
 
-Testing gate: every contract-level row of §11 — rows 1–18 — must pass in unit tests before Phase B begins.
+Testing gate: every §11 row whose Layer is `Contract` or `Invariant test` — including rows 24 and 29,
+and excluding the Coordination-only rows such as row 2 — must pass in unit tests before Phase B begins.
+The coordination rows are exercised in Phase B, not here.
 
 ### Phase B — Resolver and coordination
 
@@ -405,7 +418,8 @@ Reuse and repair, do not rewrite (`docs/foundation-audit.md` §3):
   logs, the transaction-object and user-record logs matter most: they carry the still-live authorization
   and raw identifiers respectively (R8).
 
-Depends on: Phase A (the nullifier and event shapes it must produce).
+Depends on: Phase A for the nullifier and event shapes it must consume — except the strict-verification
+re-point of the legacy claim path, which needs nothing from the new contract and may ship first (§7).
 
 ### Phase C — Nomine Studio (issuer surface)
 
@@ -509,9 +523,9 @@ Each item is a **Proposal**, not a settled decision, and none has been recorded 
 
 ## 11. Verification matrix
 
-Every row is a required automated test for the end-to-end testnet implementation.
-"Chain-authoritative" means the assertion reads contract state or canonical events, never the
-database alone.
+Every row is required. Rows 30–31 are documented trust boundaries rather than automated tests; all the
+rest are automated against the end-to-end testnet implementation. "Chain-authoritative" means the
+assertion reads contract state or canonical events, never the database alone.
 
 | # | Scenario | Expected result | Layer |
 | --- | --- | --- | --- |
