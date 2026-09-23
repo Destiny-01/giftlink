@@ -347,6 +347,12 @@ This is the finding the issue asked to inspect specifically.
   (`dropService.ts:331`), and the whole user record via `logger.info(user, "Authenticated user")`
   (`authService.ts:20`).
 
+The permit signature is a different case from the others and should not be conflated with them: once a
+settlement occurs, it is public transaction calldata and is on-chain by design. The objection there is
+not to its public existence but to an unnecessary log copy of a value that is still live and single-use
+before submission. The identity token and the private identifiers have no such public path: they are
+credentials and private data, never meant to be observable at all.
+
 D-008 constrains raw identifiers from reaching *public* logs and *on-chain* state. These are
 application logs, but they carry the same data class, and the identity token is a credential rather
 than an identifier. The non-development logger emits raw JSON (`link-backend/src/config/logger.ts`),
@@ -389,7 +395,7 @@ should not hold campaign custody or authorization.
 | Express structure, Zod validation, Helmet, rate limiting | **Retain** | Conventional and adequate. Add route-level auth defaults and stop reading `process.env` beside the validated `env`. | `index.ts:10-33`; `middleware/validator.ts:5-45`; `middleware/rateLimiter.ts` |
 | Prisma `User` model | **Retain** | `privyId` as the stable internal key is the right anchor for entitlement uniqueness. | `prisma/schema.prisma:13-30` |
 | `SocialIdentity` table | **Repair** | Useful, but written only on the unused permit path and stores raw identifiers. Needed properly for single-use entitlements. | `dropService.ts:428-452`; `schema.prisma:71-85` |
-| EIP-712 permit model (domain + single-use transition) | **Repair** | Domain separation and the status-before-transfer pattern are sound and reusable. Needs campaign and nullifier binding, and must become the enforced path. | `utils/eip712.ts:3-20`; `GiftLink.sol:221-256` |
+| EIP-712 permit model (domain + single-use transition) | **Repair** | Domain separation and the status-before-transfer pattern are sound and reusable. Needs campaign and nullifier binding, and must become the enforced path. Repairing it does not remove the signer-trust limit: the contract still cannot verify that the signer chose the correct nullifier or wallet (`docs/nomine-v1-implementation-brief.md` §4). | `utils/eip712.ts:3-20`; `GiftLink.sol:221-256` |
 | Relayer / gas sponsorship | **Repair** | Working, correctly scoped to claims, and the claimant never handles gas. Must not remain the only thing standing between an attacker and payout. | `dropService.ts:586-660` |
 | `GiftLink.sol` | **Replace** | Owner can sweep active escrow; recipient verification is not enforced on-chain; reclaim is impossible after a permissionless `markExpired`; expiry never reaches the chain; no campaign, cap, or per-identity entitlement. | `GiftLink.sol:221-256,262-286,290-305,332-338,410-413` |
 | `relayClaim` | **Replace** | The live claim path: unauthenticated route, empty recipient verification, plaintext challenge. The correct logic already exists in the unused `issueClaimPermit`. | `drops.ts:68-74`; `dropService.ts:501-583` |

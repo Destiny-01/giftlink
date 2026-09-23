@@ -45,7 +45,12 @@ The first campaign is the smallest thing that proves the loop. It has exactly on
 - **One asset:** USDC, native to Arc (R3).
 - **One allocation:** a fixed amount per successful claimant, identical for every claimant.
 - **One cap:** a funded budget that bounds the number of settlements. `cap = floor(budget / allocation)`
-  is a *consequence* of funding, not an input to be trusted separately.
+  is a *consequence* of funding, not an input to be trusted separately. A budget that is not an exact
+  multiple of the allocation therefore leaves a **remainder** — `budget − cap × allocation`, always less
+  than one allocation — which can never be settled. The remainder is not forfeited: it is part of the
+  recoverable balance and is returned under the recovery rule (§3.1, I2, §11 row 29). Requiring exact
+  divisibility at funding is an acceptable simplification instead, but it must be one or the other, not
+  left undefined.
 - **One eligibility set:** a single declared private allowlist resolved by a named Resolver.
 - **One opening time and one expiry time**, both fixed at funding.
 - **One recovery rule**, fixed at funding.
@@ -74,6 +79,13 @@ can disagree. Instead, store **facts** and derive the phase from facts plus the 
 Facts: `fundedAmount`, `settledAmount`, `settlementCount`, `allocation`, `cap`, `openingTime`,
 `expiryTime`, `reclaimedAmount`, plus per-entitlement nullifier consumption.
 
+Derived, so that no separate stored value can disagree with the facts:
+
+- `allocatedTotal = cap × allocation`
+- `remainder = fundedAmount − allocatedTotal` — never settleable, always `< allocation`
+- `remainingUnsettled = (cap − settlementCount) × allocation`
+- `reclaimable = fundedAmount − settledAmount = remainder + remainingUnsettled`
+
 Derived campaign phase:
 
 | Phase | Predicate | Money at rest |
@@ -81,14 +93,20 @@ Derived campaign phase:
 | `Unfunded` | `fundedAmount == 0` | none |
 | `Funded, not yet open` | funded, `now < openingTime` | entire budget |
 | `Open` | funded, `openingTime <= now < expiryTime`, `settlementCount < cap` | `funded − settled` |
-| `Exhausted` | funded, `settlementCount == cap` | 0 |
+| `Exhausted` | funded, `settlementCount == cap` | `remainder` (may be 0) |
 | `Expired` | `now >= expiryTime`, not reclaimed | `funded − settled` |
-| `Reclaimed` | unused balance returned per recovery rule | 0 |
+| `Reclaimed` | the reclaimable balance has been returned per the recovery rule | 0 |
 
-Settlement is permitted **only** in `Open`.
-Reclaim is permitted **only** once `now >= expiryTime`, and only for the unused balance; it never
-touches the settled portion. In `Exhausted` the unused balance is already zero, so reclaim is a no-op
-there rather than a second path. (Phase A in §7 states the same single predicate.)
+Settlement is permitted **only** while all three hold: funded, `openingTime <= now < expiryTime`, and
+`settlementCount < cap`.
+
+Reclaim is permitted **only** once settlement is no longer possible — that is, when `now >= expiryTime`
+**or** `settlementCount == cap` — and transfers exactly `reclaimable = fundedAmount − settledAmount`,
+which is the remainder plus every allocation that was never settled. It never touches the settled
+portion and never transfers more than the campaign holds. There is one governing condition, not two:
+whether settlement can still occur. `Exhausted` and `Expired` are therefore not mutually exclusive, and
+`Exhausted` does **not** mean the escrow is empty when the budget was not an exact multiple of the
+allocation.
 
 Because the phase is derived, it cannot drift: there is no transition to forget, no job required to
 notice an expiry, and no state a permissionless caller can grief. Note this is a deliberate correction
@@ -156,7 +174,7 @@ the viewer is not part of is not shown in their Inbox at all.
 | Situation | Behaviour | Why it does not add a state |
 | --- | --- | --- |
 | Before opening (`Funded, not yet open`) | Claim is visible with the opening time stated; settlement is refused. Availability is not yet true. | Resolves to `Available` once open, or to `Expired` if opening is never reached |
-| After budget exhaustion (`Exhausted`) | Settlement is refused; remaining eligible identities see the campaign as no longer available | Terminal-until-expiry, then `Expired` |
+| After budget exhaustion (`Exhausted`) | Settlement is refused; remaining eligible identities see the campaign as no longer available. Any remainder from a non-divisible budget becomes recoverable to the issuer. | Terminal-until-expiry, then `Expired`; the remainder is a recovery fact, not a fourth state |
 | Between exhaustion and expiry | Nothing is offered; no queue, no waitlist, no partial allocation | R2/R3 forbid partial settlement |
 | After expiry, unsettled | `Expired` with the recovery statement | Terminal |
 | After reclaim | Nothing offered | Reclaim is an issuer-side fact, not a claimant state |
@@ -169,10 +187,33 @@ the viewer is not part of is not shown in their Inbox at all.
 | --- | --- | --- | --- |
 | Issuer | create a campaign, fund it, reclaim the unused balance after expiry under the fixed rule | withdraw active escrow, change allocation/cap/opening/expiry/recovery after funding, redirect a settlement | contract (R5, R6) |
 | Resolver / eligibility verifier | assert membership of a declared identity in the declared set, for a named campaign, within a validity window | move funds, choose the settlement amount, redirect settlement, consume an entitlement | off-chain assertion; the contract only accepts authorizations from the campaign's declared Resolver commitment (R5, R11) |
-| Coordination service / backend signer | issue one authorization per unconsumed entitlement, sponsor submission | authorize the same entitlement twice, authorize a different amount or wallet than the claimant presented, sweep escrow | contract nullifier + domain binding (R4, R5) |
+| Coordination service / backend signer | issue one authorization per unconsumed entitlement, sponsor submission | reuse or alter an already-issued authorization; defeat the nullifier or the domain binding | contract, for those two properties only — see the signer-trust note below |
 | Relayer | submit a valid authorization and receive a defined, capped reimbursement | choose the recipient, alter the amount, submit without a valid authorization | contract (R5) |
 | Claimant | authenticate, prove eligibility, settle once to their own wallet | settle twice, settle for another identity, settle outside the window, be paid to an address other than the authorized one | contract nullifier + authorization binding (R4) |
 | Anyone | read public state and events | — | — |
+
+**Signer trust is separate from contract enforcement.** The contract can verify that an authorization
+presented to it is authentic, unexpired, unused, and bound to this campaign, chain, contract, amount and
+claimant. It **cannot** verify that the signer used the identity-derived nullifier for the claimant's
+own entitlement, or the wallet the claimant actually selected — both are inputs to the signed data. A
+compromised or malicious signer can therefore authorize a different wallet, or a duplicate nullifier for
+an entitlement that has not yet been consumed, and the contract will honour it.
+
+Two cases must be kept apart:
+
+- **Altering an existing authorization** — changing the amount, retargeting the wallet, extending the
+  deadline, or moving it to another campaign, chain, or contract — is prevented on-chain by the domain
+  binding and the nonce.
+- **Issuing a new, malicious authorization** for the wrong wallet, or for an entitlement that should not
+  be settleable, is **not** prevented on-chain. It is a trusted-operator property.
+
+Closing that second gap is an architectural decision, not an implementation mechanic. The available
+mechanisms are a campaign-scoped signer key with rotation (Q6), threshold or multi-party signing (Q6),
+and committing the eligibility set at funding so that a wrongly derived nullifier is detectable against
+the campaign's own Gate commitment (Q1). Until one is chosen, the honest statement is: **custody and
+single-use are enforced by the contract; the correctness of each authorization is enforced by the
+signer.** No interface may describe the second as cryptographically guaranteed. Rows 30–31 of §11 record
+this as a trust boundary rather than a passing test.
 
 **Off-chain eligibility is attested, not trustless.** The interface names the Resolver. The system
 never describes a Resolver-attested fact as cryptographically proven, and never presents a checkmark
@@ -184,20 +225,24 @@ as standing for identity, funding, and security at once (R11, D-005).
 
 Must hold at all times, and must be asserted by tests rather than assumed:
 
-- **I1 — Full backing:** for an `Open` campaign, `fundedAmount − settledAmount >= allocation × (cap − settlementCount)`.
-  Every settlement that can still occur is already funded.
-- **I2 — Conservation:** `fundedAmount == settledAmount + reclaimedAmount + remainingActive`, where
-  `remainingActive` is the escrow still subject to the campaign's own rules. Any modelled fee must be
-  an explicit term, not slack.
+- **I1 — Full backing:** at all times, `fundedAmount − settledAmount >= (cap − settlementCount) × allocation`.
+  Every settlement that can still occur is already funded. The difference is exactly `reclaimable`, and
+  it equals the remainder only when the campaign is exhausted.
+- **I2 — Conservation, exactly:** before reclaim, `fundedAmount == settledAmount + remainingUnsettled + remainder`;
+  after reclaim, `fundedAmount == settledAmount + reclaimedAmount`. Both forms must hold with no
+  unmodelled slack: any fee must be an explicit term, and a non-divisible budget must appear as
+  `remainder`, not as an unexplained difference.
 - **I3 — Fixed allocation:** every settlement transfers exactly `allocation`; there is no path that
-  transfers another amount.
-- **I4 — Cap:** `settlementCount <= cap`. Exhaustion is a hard stop, not a soft signal.
+  transfers another amount, and no path that settles a partial allocation.
+- **I4 — Cap:** `settlementCount <= cap`. Reaching `cap` is a hard stop on settlement, not on escrow:
+  the remainder may still be held until it is reclaimed.
 - **I5 — Single settlement per entitlement:** the set of consumed nullifiers has no duplicates, and
   `settlementCount == |consumed nullifiers|`.
 - **I6 — No sweep:** no issuer, owner, admin, Resolver, or relayer action can reduce escrow attributable
-  to unsettled entitlements before the campaign's expiry, or beyond the unused balance after it.
-- **I7 — Reclaim is bounded:** `reclaimedAmount <= fundedAmount − settledAmount`, and after reclaim no
-  further settlement is possible.
+  to still-settleable entitlements before settlement becomes impossible, or move anything beyond
+  `reclaimable` once it has.
+- **I7 — Reclaim is bounded and exact:** reclaim transfers exactly `reclaimable = fundedAmount − settledAmount`;
+  afterwards `fundedAmount == settledAmount + reclaimedAmount` and no further settlement is possible.
 - **I8 — Reimbursement is bounded:** relayer compensation is capped per settlement and cannot scale
   with campaign value (contrast the legacy gas tank, which is a per-drop balance the relayer receives
   in full — `GiftLink.sol:249-254`).
@@ -234,7 +279,7 @@ Consequences that must be explicitly handled:
 | Same identity appears twice in the eligibility set | Must be de-duplicated by the Resolver at admission, and must still yield one nullifier |
 | Two different identities resolve to the same wallet | Both may be entitled; each settles once to that wallet. Never merges entitlements |
 | Cross-campaign | The same identity may settle once in each campaign; the nullifier is campaign-scoped |
-| Chain/DB divergence after interruption | The consumed-nullifier set is rebuilt from canonical events; a database that lost the record must not permit a resettlement |
+| Chain/DB divergence after interruption | The consumed-nullifier set and the financial projections are rebuilt from canonical events; a database that lost the record must not permit a resettlement. Private eligibility data, identity mappings, and secret material are **not** reconstructible from events and must be restored from protected backups first (§11 row 22, §12 item 7) |
 
 The legacy system fails this requirement structurally: uniqueness rests on the drop's status
 transition (`GiftLink.sol:229,244`) with no identity-scoped nullifier, and the database records
@@ -255,12 +300,16 @@ precede the new contract.**
 Build the minimal contract defined in the build brief. Deliverables:
 
 - Campaign struct holding: issuer, USDC asset, funded amount, allocation, cap, gate commitment,
-  declared Resolver, opening time, expiry time, settlement count, reclaimed amount.
+  declared Resolver, opening time, expiry time, settlement count, reclaimed amount. `cap` is derived as
+  `floor(fundedAmount / allocation)`, and the remainder as `fundedAmount % allocation`; neither needs
+  separate storage, and storing them would only create something that can disagree with the facts.
 - `settle(entitlementNullifier, claimant, amount, deadline, nonce, signature)` with EIP-712 domain
   separation, nullifier consumption before transfer, and a fixed `allocation` transfer directly to the
   authorized wallet.
-- `reclaim()` callable only after expiry, only by the issuer, transferring only the unused balance to
-  the recovery destination fixed at funding.
+- `reclaim()` callable by the issuer only, and only once settlement is no longer possible — `now >= expiryTime`
+  **or** `settlementCount == cap` — transferring exactly `reclaimable = fundedAmount − settledAmount` to
+  the recovery destination fixed at funding. The remainder of a non-divisible budget is ordinary escrow
+  here, so it needs no separate recovery path.
 - Canonical events: campaign created, funded, settled, reclaim-enabled, reclaimed.
 - **No owner sweep function at all.** The absence is the guarantee (R5).
 
@@ -300,7 +349,8 @@ Depends on: Phase A (the nullifier and event shapes it must produce).
 - Fund on Arc; show the confirmed funding transaction.
 - Monitor funded, settled, remaining, exhausted, expired, and reclaimed — read from chain, not from a
   status column.
-- Reclaim after expiry, and only then.
+- Reclaim once settlement is no longer possible (expiry reached, or the cap reached), and only then;
+  show the reclaimable amount, including any remainder from a non-divisible budget.
 - Receipts and explorer references for funding, each settlement, and reclaim.
 
 Depends on: Phases A and B.
@@ -385,8 +435,8 @@ Each item is a **Proposal**, not a settled decision, and none has been recorded 
 | Q2 | **Wallet/identity binding and nullifier derivation** | (a) `H(campaignId, identityCommitment)` with a server secret; (b) `H(campaignId, privyId)`; (c) wallet-address-scoped entitlement | (a), with the secret in a dedicated key rather than reusing the legacy `SERVER_PEPPER` commitment scheme | Fixes the uniqueness rule (§6) and the privacy boundary; the wrong choice permits either double settlement or identity linkage |
 | Q3 | **Recovery recipient semantics** | (a) always the issuer address; (b) a recovery destination fixed at funding and immutable; (c) a protocol default | (b) — matches "rules fixed when the campaign was created" and survives an issuer key change mid-campaign | Determines whether R6 is enforceable and whether ownership transfer is needed |
 | Q4 | **Gas sponsorship model** | (a) keep the existing relayer; (b) Circle Paymaster / App Kit; (c) claimant pays | (a) for the proof, with a per-settlement reimbursement cap (I8), since it already works and R9 only requires that the claimant not handle gas | Affects cost, trust, and whether the relayer becomes a payout authority (audit §2.2) |
-| Q5 | **Privacy commitments** — secret management, what is logged, retention | Not a binary choice; a policy is needed | No raw identifier or identity token in any log; commitments derived with a dedicated secret; documented retention | D-008 constrains public logs and on-chain data; the current gaps are in application logs (audit §2.11) |
-| Q6 | **Signer powers** — what the coordination signer may authorize | (a) one campaign-scoped signer per campaign; (b) a global signer; (c) threshold signers | (a) for the proof, with rotation supported and no ability to alter amount or destination | Bounds the blast radius of a leaked key; a global signer can authorize across campaigns |
+| Q5 | **Privacy commitments** — secret management, what is logged, retention | Not a binary choice; a policy is needed | No raw identifier, private eligibility record, or identity token in any log; authorization copies logged only where settlement and reconciliation require them, since the authorization is public calldata once submitted but is still live and single-use before that; commitments derived with a dedicated secret; documented retention | D-008 constrains public logs and on-chain data; the current gaps are in application logs (audit §2.11) |
+| Q6 | **Signer powers** — what the coordination signer may authorize | (a) one campaign-scoped signer per campaign; (b) a global signer; (c) threshold or multi-party signing | (a) with rotation for the proof, paired with committing the eligibility set at funding (Q1) so a wrongly derived nullifier is at least detectable; (c) if the value at stake justifies it | This is the **only** enforcement of authorization correctness. The contract verifies authenticity, single use, and domain binding, but cannot tell whether the signer chose the right nullifier or wallet (§4). It therefore resolves a residual gap in R4/R5, not just key hygiene |
 | Q7 | **Upgradeability and migration** | (a) immutable contract per campaign; (b) upgradeable proxy; (c) immutable plus a successor deployment | (a), matching D-015's rejection of adapters and the "keep the contract small" instruction | Governs whether custody can be changed after funding, which interacts directly with R5 and R6 |
 
 ---
@@ -412,25 +462,30 @@ database alone.
 | 11 | Duplicate entitlement: same identity obtains a second authorization while unconsumed | Issuance permitted, but only one settlement can land; the second reverts | Contract + Coordination |
 | 12 | Settlement before `openingTime` | Rejected | Contract |
 | 13 | Settlement exactly at and after `expiryTime` | Rejected | Contract |
-| 14 | Reclaim before expiry, by anyone | Rejected | Contract |
+| 14 | Reclaim before expiry **and** before the cap is reached, by anyone | Rejected | Contract |
 | 15 | Reclaim by a non-issuer after expiry | Rejected | Contract |
-| 16 | Reclaim after expiry by the issuer | Exactly the unused balance moves to the fixed recovery destination; settled funds untouched | Contract |
+| 16 | Reclaim after expiry by the issuer | Exactly `reclaimable` moves to the fixed recovery destination; settled funds untouched; subsequent settlements revert | Contract |
 | 17 | Owner/admin attempts to move active escrow | Function does not exist; no path succeeds | Contract |
-| 18 | Accounting invariant I2 after an arbitrary sequence of settle/reclaim operations | `funded == settled + reclaimed + remaining`, with no unmodelled slack | Invariant test |
+| 18 | Accounting invariant I2 after an arbitrary sequence of settle/reclaim operations | `funded == settled + remainingUnsettled + remainder` before reclaim and `funded == settled + reclaimed` after, with no unmodelled slack | Invariant test |
 | 19 | Retry of a failed settlement with the same authorization | Exactly one settlement row; one on-chain settlement | Coordination |
 | 20 | Replaced or dropped transaction retried | Exactly one settlement; no duplicate record or duplicate event projection | Coordination |
 | 21 | Re-submission after a timeout where the first attempt actually landed | No second settlement; the service converges on the single on-chain result | Coordination |
-| 22 | Database interrupted, then restored from canonical events | Correct campaign, entitlement, and Inbox state; consumed nullifiers intact; no resettlement possible | Recovery |
+| 22 | Database loss with private data protected by backup, then restore: backups first, then canonical-event replay | Financial projections (funded, settled, remaining, reclaimable, reclaimed) and the consumed-nullifier set are rebuilt exactly from events; private eligibility sets, identity mappings, and secret material are restored from protected backups, **not** derived from events; personalized Inbox discovery works again; no resettlement is possible | Recovery |
 | 23 | Event stream replayed out of order or duplicated | Projection is idempotent and converges on chain state | Recovery |
 | 24 | Budget exhausted, then a further eligible claimant attempts to settle | Rejected; capacity is a hard stop | Contract |
 | 25 | Resolver/service unavailable during a claim attempt | No settlement, no false "Completed"; the claimant sees a retryable state | Coordination |
 | 26 | Funding transaction reverted | Campaign is not shown as funded or available | Coordination |
-| 27 | Privacy assertion | No raw identifier, identity token, or permit signature appears on-chain, in public logs, or in API responses | Privacy |
+| 27 | Privacy assertion | No raw identifier, private eligibility record, or identity token appears on-chain, in public logs, or in API responses. The settlement authorization is **excluded**: it is submitted as public transaction calldata and is on-chain by design. Authorization copies must not be logged beyond what settlement and reconciliation require, and the authenticated authorization-delivery API is explicitly allowed | Privacy |
 | 28 | State distinction assertion | An unfunded campaign is never `Available`; an eligible-but-unopened claimant is never shown as settled; `Completed` requires a decodable settlement event | Product + E2E |
+| 29 | Non-divisible budget: fund an amount that is not a multiple of the allocation, settle to the cap | `cap == floor(funded / allocation)`; `remainder == funded % allocation` stays in escrow after exhaustion; settlement is refused; reclaim returns exactly `reclaimable`, and afterwards `funded == settled + reclaimed` with no stranded balance | Contract |
+| 30 | Trust boundary: a compromised signer applies its authorized role to a **different wallet** than the claimant selected | **Not prevented on-chain.** The contract cannot detect it, because the wallet is an input to the signed data. Recorded as a trusted-operation assumption with the mitigations in Q6/Q1, not as a passing test. No interface may claim otherwise | Trust boundary (documented, not a pass/fail test) |
+| 31 | Trust boundary: a compromised signer issues a second authorization for an entitlement that should not be settleable | **Not prevented on-chain** for the same reason. Single-use still holds once a nullifier is consumed, so the damage is bounded to unconsumed entitlements. Recorded as a trusted-operation assumption with the mitigations in Q6/Q1 | Trust boundary (documented, not a pass/fail test) |
 
-Rows 2–17 and 24 are adversarial; rows 19–23 are recovery; the remainder are happy-path and invariant.
-All are required — the build brief lists ten, and this matrix extends them to cover the failures the
-audit found in the legacy system's own claim path.
+Rows 2–17, 24 and 29 are adversarial or boundary; rows 19–23 are recovery; rows 30–31 are trust
+boundaries that must be documented rather than tested, because the contract cannot enforce them; the
+remainder are happy-path and invariant. All are required — the build brief lists ten, and this matrix
+extends them to cover the failures the audit found in the legacy system's own claim path and the
+guarantees the contract cannot provide.
 
 ---
 
@@ -440,16 +495,23 @@ The V1 proof is complete only when all of the following are true and evidenced:
 
 1. The campaign contract is deployed to Arc **testnet** and its deployed bytecode matches the compiled
    source; the address and the deployment transaction are recorded in the repository.
-2. Every row of §11 passes against that deployment, and the commands to reproduce them are committed.
+2. Every testable row of §11 passes against that deployment, and the commands to reproduce them are
+   committed. Rows 30–31 are documented trust boundaries rather than tests, and must appear in the
+   documentation with their mitigations and residual risk stated.
 3. A campaign is visibly funded on-chain, and an eligible claimant settles exactly `allocation` to
    their own wallet with a decodable receipt.
 4. A duplicate and an unauthorized claim both fail, demonstrated rather than asserted.
 5. The issuer view, the claimant Inbox, and chain state agree; any disagreement fails the gate.
-6. An expired campaign's unused balance is reclaimed to the fixed recovery destination, and the settled
-   portion is untouched.
-7. The database can be dropped and rebuilt from canonical events to a correct state.
-8. No identity token, raw identifier, or authorization signature appears in application logs; the four
-   known logging sites from the audit are gone.
+6. Once settlement is no longer possible, the reclaimable balance — including any remainder from a
+   non-divisible budget — is reclaimed to the fixed recovery destination, and the settled portion is
+   untouched. `funded == settled + reclaimed` afterwards, with nothing stranded.
+7. The projections that events can reconstruct — funded, settled, remaining, reclaimable, reclaimed, and
+   the consumed-nullifier set — can be rebuilt from canonical events, and the private dependencies they
+   cannot reconstruct (eligibility set, identity mappings, secret material) have documented protected
+   backup and restoration. After both, the projections match chain state and no resettlement is possible.
+8. No identity token, raw identifier, or private eligibility record appears in application logs, and
+   authorization copies are logged only where settlement and reconciliation require them; the four known
+   logging sites from the audit are gone.
 9. Configuration has no silent fallbacks: a missing chain ID, RPC URL, contract address, or USDC
    address stops the application rather than defaulting.
 10. Reviewer documentation states what is proven and what is not. A passing demo is not an audit.
