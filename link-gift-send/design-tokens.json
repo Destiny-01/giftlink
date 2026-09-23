@@ -1,85 +1,100 @@
 {
   "$schema": "https://json.schemastore.org/design-tokens",
+  "$description": "Semantic tokens for the Nomine frontend, mirroring the HSL custom properties in src/index.css. Canonical source: brand/approved/tokens.json and brand/approved/tokens.css (Nomine identity 1.0.0).",
   "colors": {
     "background": {
-      "value": "hsl(212, 73%, 10%)",
-      "description": "Deep navy background"
+      "value": "hsl(240, 8%, 5%)",
+      "description": "Onyx #0B0B0D — primary dark surface"
     },
     "surface": {
-      "value": "hsl(215, 68%, 7%)",
-      "description": "Near-black card surface"
-    },
-    "foreground": {
-      "value": "hsl(200, 45%, 92%)",
-      "description": "Off-white text"
-    },
-    "accent": {
-      "value": "hsl(170, 100%, 50%)",
-      "description": "Electric teal primary accent"
-    },
-    "accent-2": {
-      "value": "hsl(162, 70%, 65%)",
-      "description": "Soft teal secondary accent"
-    },
-    "gold": {
-      "value": "hsl(45, 100%, 70%)",
-      "description": "Gold accent"
-    },
-    "success": {
-      "value": "hsl(142, 71%, 58%)",
-      "description": "Success green"
-    },
-    "danger": {
-      "value": "hsl(0, 100%, 71%)",
-      "description": "Danger red"
+      "value": "hsl(240, 1%, 10%)",
+      "description": "Raised dark surface"
     },
     "muted": {
-      "value": "hsl(200, 50%, 14%)",
+      "value": "hsl(240, 1%, 14%)",
       "description": "Muted surface"
     },
+    "foreground": {
+      "value": "hsl(42, 29%, 93%)",
+      "description": "Warm ivory #F3F0E9 — primary text, 17.28:1 on onyx"
+    },
     "muted-foreground": {
-      "value": "hsl(207, 27%, 68%)",
-      "description": "Muted text"
+      "value": "hsl(40, 6%, 71%)",
+      "description": "Dark secondary text #B9B6B0 — supporting text on dark surfaces"
+    },
+    "accent": {
+      "value": "hsl(246, 66%, 56%)",
+      "description": "Deep violet #5546D9 — primary controls and accent text, 6.43:1 with white"
+    },
+    "accent-2": {
+      "value": "hsl(247, 100%, 84%)",
+      "description": "Pale violet #B7AEFF — accent text and focus on dark surfaces, 9.84:1 on onyx"
+    },
+    "signal-violet": {
+      "value": "#665CF6",
+      "description": "Sparse brand accent only; fails normal-text AA on ivory"
+    },
+    "success": {
+      "value": "hsl(247, 100%, 84%)",
+      "description": "Completed state; violet marks verified outcomes, always paired with wording and icons"
+    },
+    "danger": {
+      "value": "hsl(0, 72%, 68%)",
+      "description": "Destructive and revoked state"
+    },
+    "border": {
+      "value": "hsl(240, 1%, 27%)",
+      "description": "Rule #434347 — decorative dividers only"
+    },
+    "input": {
+      "value": "hsl(40, 6%, 71%)",
+      "description": "Control border #B9B6B0 — essential control boundaries"
+    },
+    "ring": {
+      "value": "hsl(247, 100%, 84%)",
+      "description": "Focus indicator on dark surfaces"
     }
   },
   "typography": {
     "fontFamily": {
-      "sans": "Inter, system-ui, sans-serif",
-      "display": "Space Grotesk, Inter, system-ui, sans-serif"
+      "sans": "Instrument Sans, system-ui, sans-serif",
+      "mono": "IBM Plex Mono, ui-monospace, monospace"
     },
     "fontSize": {
       "h1": "2.5rem",
       "h2": "1.75rem",
       "h3": "1.25rem",
       "body": "1rem",
-      "small": "0.813rem"
+      "small": "0.875rem"
     },
     "fontWeight": {
       "regular": 400,
-      "medium": 500,
-      "semibold": 600,
-      "bold": 700
+      "heading": 500,
+      "label": 550,
+      "control": 600
     }
   },
   "spacing": {
-    "xs": "0.25rem",
-    "sm": "0.5rem",
-    "md": "1rem",
-    "lg": "1.5rem",
-    "xl": "2rem",
-    "2xl": "3rem"
+    "xs": "4px",
+    "sm": "8px",
+    "md": "12px",
+    "lg": "16px",
+    "xl": "24px",
+    "2xl": "32px",
+    "3xl": "48px",
+    "4xl": "64px",
+    "5xl": "96px"
   },
   "borderRadius": {
-    "default": "0.75rem",
-    "lg": "var(--radius)",
-    "md": "calc(var(--radius) - 2px)",
-    "sm": "calc(var(--radius) - 4px)"
+    "control": "3px"
   },
-  "shadows": {
-    "card": "0 6px 30px rgba(1,8,16,0.6)",
-    "glow": "0 0 40px rgba(0,255,209,0.15)"
+  "layout": {
+    "contentWidth": "1200px",
+    "columnsDesktop": 12,
+    "columnsMobile": 4
   },
   "animations": {
-    "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)"
+    "transition": "all 0.18s cubic-bezier(0.4, 0, 0.2, 1)",
+    "note": "Reduced-motion alternatives are enforced in src/index.css"
   }
 }

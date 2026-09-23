@@ -12,7 +12,8 @@ interface StatusBadgeProps {
 export function StatusBadge({ status }: StatusBadgeProps) {
   const variants = {
     pending: {
-      className: "bg-gold/20 text-gold border-gold/30",
+      className:
+        "bg-muted-foreground/20 text-muted-foreground border-muted-foreground/30",
       label: "Pending",
     },
     claimed: {

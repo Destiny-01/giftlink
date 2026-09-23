@@ -58,7 +58,7 @@ createRoot(document.getElementById("root")!).render(
       loginMethods: ["wallet", "email", "twitter", "discord"],
       appearance: {
         theme: "dark",
-        accentColor: "#00FFD1",
+        accentColor: "#5546D9",
       },
       supportedChains: [arc],
       defaultChain: arc,
