@@ -24,6 +24,14 @@ const envSchema = z.object({
   EIP712_DOMAIN_NAME: z.string().default("GiftLinkPermit"),
   EIP712_VERSION: z.string().default("1"),
   ENABLE_EVENT_LISTENER: z.coerce.boolean().default(true),
+  /**
+   * Prisma's query log includes bound parameters, so it prints raw emails, handles and
+   * provider ids. Off unless asked for; see the logger note in config/prisma.ts.
+   */
+  PRISMA_QUERY_LOG: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 const envParseResult = envSchema.safeParse(process.env);

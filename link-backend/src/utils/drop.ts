@@ -23,6 +23,22 @@ export const WALLET_TYPE_MAP: Record<string, WalletType> = {
   privy: WalletType.PRIVY,
 };
 
+/** USDC has six decimals on the configured network. */
+export const USDC_DECIMALS = 6;
+
+/**
+ * Converts a stored gift amount to the base units the contract uses.
+ *
+ * The two representations differ, and the difference is load-bearing for every comparison
+ * between the database and the chain: `Drop.amount` holds the human-unit string the sender
+ * typed ("5" for five USDC, see `prepareDrop`), while `GiftLink` stores and emits base units
+ * (`5_000_000`), as does `Drop.gasTankAmount`. Comparing the two directly never matches, so
+ * every amount comparison goes through this one function.
+ */
+export function dropAmountToBaseUnits(amount: string): bigint {
+  return ethers.parseUnits(amount, USDC_DECIMALS);
+}
+
 export function normalizeIdentifier(
   identifier: string,
   type: RecipientType | string

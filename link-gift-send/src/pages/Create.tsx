@@ -173,7 +173,7 @@ export default function Create() {
             { chainId: ARC_CHAIN_ID },
             {
               onError: (error) =>
-                console.error("Failed to switch chain:", error),
+                console.error("Failed to switch chain:", error instanceof Error ? error.message : "Unknown error"),
             }
           ),
         () => chainId, // Function to get current chain ID
@@ -257,7 +257,7 @@ export default function Create() {
         refreshBalance();
       }
     } catch (error: unknown) {
-      console.error("Failed to create drop:", error);
+      console.error("Failed to create drop:", error instanceof Error ? error.message : "Unknown error");
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -363,7 +363,7 @@ export default function Create() {
         )
       );
     } catch (error) {
-      console.error("Failed to fetch gas tank amount:", error);
+      console.error("Failed to fetch gas tank amount:", error instanceof Error ? error.message : "Unknown error");
       // Don't show error to user, just keep gasTankAmount as null
     } finally {
       setIsLoadingGasTank(false);

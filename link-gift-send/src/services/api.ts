@@ -66,7 +66,6 @@ async function fetchWithAuth(
   };
 
   const identityToken = getIdentityToken?.() || getAuthToken();
-  console.log(identityToken, "identityToken");
   if (identityToken) {
     headers.Authorization = `Bearer ${identityToken}`;
   }

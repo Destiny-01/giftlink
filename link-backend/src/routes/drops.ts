@@ -65,9 +65,13 @@ router.post(
   asyncHandler(issueClaimPermitHandler)
 );
 
+// The relay endpoint is the one path that moves USDC, so it now authenticates like every
+// other mutation on this router. Authorization itself lives in the shared recipient policy
+// that both this route and the permit route use.
 router.post(
   "/:id/relay-claim",
-  dropMutationLimiter,
+  claimPermitLimiter,
+  authenticate,
   validateParams(dropIdParamSchema),
   validate(relayClaimSchema),
   asyncHandler(relayClaimHandler)

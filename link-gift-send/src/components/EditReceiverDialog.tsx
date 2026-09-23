@@ -152,7 +152,7 @@ export function EditReceiverDialog({
         });
       }
     } catch (error: unknown) {
-      console.error("Failed to edit receiver:", error);
+      console.error("Failed to edit receiver");
       const errorMessage =
         error instanceof Error
           ? error.message

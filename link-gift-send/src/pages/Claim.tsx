@@ -90,7 +90,7 @@ export default function Claim() {
         setTimeout(() => loadGift(), 1000);
       }
     } catch (error: unknown) {
-      console.error("Failed to claim:", error);
+      console.error("Failed to claim:", error instanceof Error ? error.message : "Unknown error");
       const errorMessage =
         error instanceof Error
           ? error.message

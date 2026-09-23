@@ -88,7 +88,10 @@ export function useWalletBalances() {
           })) as bigint;
           return { address, balance };
         } catch (error) {
-          console.error(`Failed to fetch balance for ${address}:`, error);
+          console.error(
+            "Failed to fetch wallet balance:",
+            error instanceof Error ? error.message : "Unknown error"
+          );
           return { address, balance: 0n };
         }
       });
@@ -100,7 +103,7 @@ export function useWalletBalances() {
       });
       setBalances(balanceMap);
     } catch (error) {
-      console.error("Failed to fetch balances:", error);
+      console.error("Failed to fetch balances:", error instanceof Error ? error.message : "Unknown error");
       setIsError(true);
     } finally {
       setIsLoading(false);

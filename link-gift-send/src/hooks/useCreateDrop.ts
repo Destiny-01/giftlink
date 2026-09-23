@@ -246,14 +246,6 @@ export function useCreateDrop() {
           );
 
           if (!dropCreatedEvent) {
-            console.error(
-              "[createDrop] Parsed logs:",
-              parsedLogs.map((log) => ({
-                eventName: log.eventName,
-                address: log.address,
-              }))
-            );
-            console.error("[createDrop] All receipt logs:", receipt.logs);
             throw new Error(
               `DropCreated event not found in transaction logs. Found ${parsedLogs.length} parsed events.`
             );
@@ -261,8 +253,10 @@ export function useCreateDrop() {
 
           onchainDropId = (dropCreatedEvent.args as { dropId: bigint }).dropId;
         } catch (err) {
-          console.error("[createDrop] Error parsing event logs:", err);
-          console.error("[createDrop] All receipt logs:", receipt.logs);
+          console.error(
+            "[createDrop] Error parsing event logs:",
+            err instanceof Error ? err.message : "Unknown error"
+          );
           throw new Error(
             `Failed to parse DropCreated event from transaction logs: ${
               err instanceof Error ? err.message : String(err)
@@ -282,7 +276,7 @@ export function useCreateDrop() {
           txHash,
         };
       } catch (err: unknown) {
-        console.error("[createDrop] Error:", err);
+        console.error("[createDrop] Error:", err instanceof Error ? err.message : "Unknown error");
         setError(err instanceof Error ? err.message : "Failed to create drop");
         setIsLoading(false);
         setStep("idle");
@@ -451,14 +445,6 @@ export function useCreateDropPrivy() {
           );
 
           if (!dropCreatedEvent) {
-            console.error(
-              "[createDropPrivy] Parsed logs:",
-              parsedLogs.map((log) => ({
-                eventName: log.eventName,
-                address: log.address,
-              }))
-            );
-            console.error("[createDropPrivy] All receipt logs:", receipt.logs);
             throw new Error(
               `DropCreated event not found in transaction logs. Found ${parsedLogs.length} parsed events.`
             );
@@ -466,8 +452,10 @@ export function useCreateDropPrivy() {
 
           onchainDropId = (dropCreatedEvent.args as { dropId: bigint }).dropId;
         } catch (err) {
-          console.error("[createDropPrivy] Error parsing event logs:", err);
-          console.error("[createDropPrivy] All receipt logs:", receipt.logs);
+          console.error(
+            "[createDropPrivy] Error parsing event logs:",
+            err instanceof Error ? err.message : "Unknown error"
+          );
           throw new Error(
             `Failed to parse DropCreated event from transaction logs: ${
               err instanceof Error ? err.message : String(err)
@@ -487,7 +475,7 @@ export function useCreateDropPrivy() {
           txHash,
         };
       } catch (err: unknown) {
-        console.error("[createDropPrivy] Error:", err);
+        console.error("[createDropPrivy] Error:", err instanceof Error ? err.message : "Unknown error");
         setError(err instanceof Error ? err.message : "Failed to create drop");
         setIsLoading(false);
         setStep("idle");
@@ -559,7 +547,7 @@ Timestamp: ${timestamp}`;
 
         return { txHash: result.txHash };
       } catch (err: unknown) {
-        console.error("[claimDrop] Error:", err);
+        console.error("[claimDrop] Error:", err instanceof Error ? err.message : "Unknown error");
         setError(err instanceof Error ? err.message : "Failed to claim drop");
         setIsLoading(false);
         setStep("idle");
@@ -639,7 +627,7 @@ Timestamp: ${timestamp}`;
 
         return { txHash: result.txHash };
       } catch (err: unknown) {
-        console.error("[claimDropPrivy] Error:", err);
+        console.error("[claimDropPrivy] Error:", err instanceof Error ? err.message : "Unknown error");
         setError(err instanceof Error ? err.message : "Failed to claim drop");
         setIsLoading(false);
         setStep("idle");

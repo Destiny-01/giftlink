@@ -1,39 +1,10 @@
-import express from "express";
-import cors from "cors";
-import helmet from "helmet";
-import cookieParser from "cookie-parser";
 import { env } from "./config/env";
 import { logger } from "./config/logger";
-import { httpLogger } from "./middleware/logger";
-import { errorHandler } from "./middleware/errorHandler";
-import routes from "./routes";
+import { createApp } from "./app";
 import { startJobs } from "./jobs";
+import { errorDiagnostics, stackTraceAllowed } from "./utils/safeLog";
 
-const app = express();
-
-// Security middleware
-app.use(helmet());
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "*",
-    credentials: true,
-  })
-);
-
-// Cookie parsing (must be before body parsing)
-app.use(cookieParser());
-
-// Body parsing
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Logging
-app.use(httpLogger);
-
-// API routes
-app.use("/api", routes);
-
-app.use(errorHandler);
+const app = createApp();
 
 const server = app.listen(env.PORT, () => {
   logger.info(`🚀 GiftLink backend running on port ${env.PORT}`);
@@ -42,24 +13,23 @@ const server = app.listen(env.PORT, () => {
 
 startJobs();
 
-// Global error handlers
-process.on(
-  "unhandledRejection",
-  (reason: Error | unknown, promise: Promise<any>) => {
-    logger.error({
-      error: "Unhandled Promise Rejection",
-      reason: reason instanceof Error ? reason.message : String(reason),
-      stack: reason instanceof Error ? reason.stack : undefined,
-      promise: promise,
-    });
-  }
-);
+// Global error handlers. These log allowlisted fields only: serialising the rejection
+// value or the promise itself is what leaked context into the log sink.
+process.on("unhandledRejection", (reason: unknown) => {
+  logger.error({
+    operation: "process",
+    outcome: "unhandled_rejection",
+    ...errorDiagnostics(reason),
+    stack: stackTraceAllowed() && reason instanceof Error ? reason.stack : undefined,
+  });
+});
 
 process.on("uncaughtException", (error: Error) => {
   logger.error({
-    error: "Uncaught Exception",
-    message: error.message,
-    stack: error.stack,
+    operation: "process",
+    outcome: "uncaught_exception",
+    ...errorDiagnostics(error),
+    stack: stackTraceAllowed() ? error.stack : undefined,
   });
 
   server.close(() => {

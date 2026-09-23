@@ -1,10 +1,19 @@
 import { Request, Response, NextFunction } from "express";
 import { UnauthorizedError } from "../utils/errors";
-import { syncUserFromPrivy } from "../services/authService";
+import { syncUserFromPrivy, type WalletKind } from "../services/authService";
 
 export interface AuthenticatedUser {
   userId: string;
   privyUserId: string;
+  /**
+   * Every wallet the identity provider reports for this account. Authorization must use
+   * this list, not the single persisted column, so a second or connected wallet is not
+   * silently refused.
+   */
+  walletAddresses: string[];
+  /** Lower-case address -> provider's classification, for recording the wallet type. */
+  walletKinds: Record<string, WalletKind>;
+  /** First linked wallet, persisted on the user record. Kept for compatibility. */
   walletAddress: string | null;
   email: string | null;
   discordId: string | null;
@@ -14,6 +23,23 @@ export interface AuthenticatedUser {
 
 export interface AuthRequest extends Request {
   authUser?: AuthenticatedUser;
+}
+
+function toAuthenticatedUser(
+  user: Awaited<ReturnType<typeof syncUserFromPrivy>>["user"],
+  identities: Awaited<ReturnType<typeof syncUserFromPrivy>>["identities"]
+): AuthenticatedUser {
+  return {
+    userId: user.id,
+    privyUserId: user.privyId,
+    walletAddresses: identities.walletAddresses,
+    walletKinds: identities.walletKinds,
+    walletAddress: user.walletAddress,
+    email: identities.email,
+    discordId: identities.discordId,
+    twitterId: identities.twitterId,
+    telegramId: identities.telegramId,
+  };
 }
 
 export async function authenticate(
@@ -27,19 +53,9 @@ export async function authenticate(
     if (!idToken) {
       throw new UnauthorizedError("Missing or invalid authorization header");
     }
-    console.log(idToken, "idToken");
 
-    const user = await syncUserFromPrivy(idToken);
-
-    req.authUser = {
-      userId: user.id,
-      privyUserId: user.privyId,
-      walletAddress: user.walletAddress,
-      email: user.email,
-      discordId: user.discordId,
-      twitterId: user.twitterId,
-      telegramId: user.telegramId,
-    };
+    const { user, identities } = await syncUserFromPrivy(idToken);
+    req.authUser = toAuthenticatedUser(user, identities);
 
     next();
   } catch (error) {
@@ -53,7 +69,7 @@ export async function authenticate(
 
 /**
  * Optional authentication middleware.
- * Attempts to authenticate the user if cookies are present,
+ * Attempts to authenticate the user if a token is present,
  * but allows the request to continue even if authentication fails or is missing.
  * Sets req.authUser if authentication succeeds.
  */
@@ -75,18 +91,8 @@ export async function optionalAuthenticate(
       return next();
     }
 
-    // Attempt to authenticate
-    const user = await syncUserFromPrivy(idToken);
-
-    req.authUser = {
-      userId: user.id,
-      privyUserId: user.privyId,
-      walletAddress: user.walletAddress,
-      email: user.email,
-      discordId: user.discordId,
-      twitterId: user.twitterId,
-      telegramId: user.telegramId,
-    };
+    const { user, identities } = await syncUserFromPrivy(idToken);
+    req.authUser = toAuthenticatedUser(user, identities);
 
     next();
   } catch (error) {

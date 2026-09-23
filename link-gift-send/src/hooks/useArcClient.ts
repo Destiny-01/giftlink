@@ -147,7 +147,7 @@ export function useArcClient() {
           }
           createDropRef.current = {};
         } catch (err) {
-          console.error("[useArcClient] Error confirming drop:", err);
+          console.error("[useArcClient] Error confirming drop:", err instanceof Error ? err.message : "Unknown error");
           const apiError = normalizeError(err);
           setError(apiError.message);
           setDropFlow({ step: "idle", error: apiError.message });
@@ -164,7 +164,7 @@ export function useArcClient() {
   // Handle send transaction errors
   useEffect(() => {
     if (sendTxError && createDropRef.current.reject) {
-      console.error("[useArcClient] Send transaction error:", sendTxError);
+      console.error("[useArcClient] Send transaction failed");
       const error = normalizeError(sendTxError);
       setError(error.message);
       setDropFlow({ step: "idle", error: error.message });
@@ -177,10 +177,7 @@ export function useArcClient() {
   // Handle send transaction receipt errors
   useEffect(() => {
     if (sendTxReceiptError && createDropRef.current.reject) {
-      console.error(
-        "[useArcClient] Send transaction receipt error:",
-        sendTxReceiptError
-      );
+      console.error("[useArcClient] Send transaction receipt failed");
       const error = normalizeError(sendTxReceiptError);
       setError(error.message);
       setDropFlow({ step: "idle", error: error.message });
@@ -233,7 +230,7 @@ export function useArcClient() {
           }
           claimDropRef.current = {};
         } catch (err) {
-          console.error("[useArcClient] Error recording claim:", err);
+          console.error("[useArcClient] Error recording claim:", err instanceof Error ? err.message : "Unknown error");
           const apiError = normalizeError(err);
           setError(apiError.message);
           setClaimFlow({ step: "idle", error: apiError.message });
@@ -263,7 +260,7 @@ export function useArcClient() {
           }
           revokeDropRef.current = {};
         } catch (err) {
-          console.error("[useArcClient] Error recording revoke:", err);
+          console.error("[useArcClient] Error recording revoke:", err instanceof Error ? err.message : "Unknown error");
           const apiError = normalizeError(err);
           setError(apiError.message);
           setIsLoading(false);
@@ -306,7 +303,7 @@ export function useArcClient() {
             // Transaction hash and confirmation will be handled by useEffect hooks
             // The promise will be resolved/rejected in the confirmation handler or error handlers
           } catch (err) {
-            console.error("[useArcClient] Error in revokeDrop:", err);
+            console.error("[useArcClient] Error in revokeDrop:", err instanceof Error ? err.message : "Unknown error");
             const apiError = normalizeError(err);
             setError(apiError.message);
             setIsLoading(false);
@@ -335,7 +332,7 @@ export function useArcClient() {
         );
         return result;
       } catch (err) {
-        console.error("[useArcClient] Error editing receiver:", err);
+        console.error("[useArcClient] Editing receiver failed");
         const apiError = normalizeError(err);
         setError(apiError.message);
         return false;
@@ -366,7 +363,7 @@ export function useArcClient() {
           claimable: response.claimable.drops.map(api.dropToGift),
         };
       } catch (err) {
-        console.error("[useArcClient] Error getting user drops:", err);
+        console.error("[useArcClient] Error getting user drops:", err instanceof Error ? err.message : "Unknown error");
         const apiError = normalizeError(err);
         setError(apiError.message);
         return {
@@ -388,7 +385,7 @@ export function useArcClient() {
       const gift = await api.getDropById(id);
       return gift;
     } catch (err) {
-      console.error("[useArcClient] Error getting drop by id:", err);
+      console.error("[useArcClient] Error getting drop by id:", err instanceof Error ? err.message : "Unknown error");
       const apiError = normalizeError(err);
       setError(apiError.message);
       return null;

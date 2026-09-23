@@ -46,14 +46,14 @@ export async function confirmDropHandler(req: AuthRequest, res: Response) {
     throw new ForbiddenError("Authenticated user is required");
   }
 
-  await confirmDrop(body, authUser.privyUserId);
-  res.json({ success: true });
+  const result = await confirmDrop(body, authUser);
+  res.json({ success: true, onchainId: result.onchainId });
 }
 
 export async function getDropDetailsHandler(req: AuthRequest, res: Response) {
   const { id } = req.params;
   const authUser = req.authUser;
-  const drop = await getDropDetails(id, authUser?.privyUserId);
+  const drop = await getDropDetails(id, authUser);
   res.json(drop);
 }
 
@@ -62,43 +62,28 @@ export async function issueClaimPermitHandler(req: AuthRequest, res: Response) {
   const authUser = req.authUser;
   const { id } = req.params;
 
-  if (!authUser?.walletAddress) {
-    throw new ForbiddenError("Authenticated user wallet address is required");
-  }
-
-  if (authUser.walletAddress !== body.claimerAddress.toLowerCase()) {
-    throw new ForbiddenError(
-      "Claimer address does not match authenticated user"
-    );
-  }
-
   if (!authUser?.privyUserId) {
-    throw new ForbiddenError("Authenticated user privyId is required");
+    throw new ForbiddenError("Authenticated user is required");
   }
 
-  if (!body.claimerIdentifier) {
-    const fallbackIdentifier =
-      authUser.email || authUser.discordId || authUser.twitterId;
-    if (fallbackIdentifier) {
-      body.claimerIdentifier = fallbackIdentifier;
-    }
-  }
-
-  const oauthProvider = "privy";
-  const permit = await issueClaimPermit(
-    id,
-    body,
-    authUser.privyUserId,
-    oauthProvider
-  );
+  // Wallet binding and the recipient policy live in one shared place, so this endpoint
+  // cannot drift from the relay endpoint's checks. `body.claimerIdentifier` is accepted
+  // for caller compatibility and deliberately unused: the identity that authorizes a
+  // claim is the provider-verified one.
+  const permit = await issueClaimPermit(id, body, authUser, "privy");
   res.json(permit);
 }
 
 export async function relayClaimHandler(req: AuthRequest, res: Response) {
   const body = req.body as RelayClaimRequest;
   const { id } = req.params;
+  const authUser = req.authUser;
 
-  const response = await relayClaim(id, body);
+  if (!authUser?.privyUserId) {
+    throw new ForbiddenError("Authenticated user is required");
+  }
+
+  const response = await relayClaim(id, body, authUser);
   res.json(response);
 }
 
@@ -111,17 +96,7 @@ export async function recordDropClaimHandler(req: AuthRequest, res: Response) {
     throw new ForbiddenError("Authenticated user is required");
   }
 
-  // Note: We still validate wallet address matches, but use privyId as source of truth
-  if (
-    authUser.walletAddress &&
-    authUser.walletAddress !== body.claimerAddress.toLowerCase()
-  ) {
-    throw new ForbiddenError(
-      "Claimer address does not match authenticated user"
-    );
-  }
-
-  await recordDropClaim(id, body, authUser.privyUserId);
+  await recordDropClaim(id, body, authUser);
   res.json({ success: true });
 }
 
