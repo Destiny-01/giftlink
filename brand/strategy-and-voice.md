@@ -16,7 +16,7 @@ Principles: funding before promotion; rules before persuasion; people before wal
 
 Narrative: An issuer knows who value is for before knowing where it will settle. Nomine gives that value a funded Claim with explicit conditions. The economic inbox brings the Claim to the eligible person. Settlement resolves its destination; a receipt records the result. If unused, the original recovery rule still applies.
 
-Current proof: a fixed-allocation USDC community campaign on Arc, one named Resolver-backed eligibility source, direct settlement and deterministic issuer recovery. Broader protocol purpose is not a statement that future settlement types are shipped.
+Current proof (in development): a fixed-allocation USDC community campaign on Arc, one named Resolver-backed eligibility source, direct settlement and deterministic issuer recovery. This describes the proof being built, not a live campaign. Broader protocol purpose is not a statement that future settlement types are shipped.
 
 ## Architecture
 
