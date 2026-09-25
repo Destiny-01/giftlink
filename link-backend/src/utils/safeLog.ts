@@ -82,21 +82,23 @@ export function errorTypeName(error: unknown): string {
 }
 
 /**
- * V8's frame lines: `at fn (path:line:col)`, `at path:line:col`, with async/new variants.
+ * V8's frame lines.
  *
- * The source position is required, which is what distinguishes a frame from a line of the
- * message. Without that requirement a multiline message would be indistinguishable from
- * frames.
+ * Either `at fn (path:line:col)` (`at async fn (...)`, `at eval (eval at a.ts:1:1, <anon>:2:3)`)
+ * or a bare `at path:line:col`. Requiring the source position, and requiring the
+ * parenthesised form to be free of the shape a sentence would have, is what distinguishes a
+ * frame from a line of a message that merely starts with "at ".
  */
-const STACK_FRAME_PATTERN = /^\s*at\s.+(?::\d+:\d+\)?)$/;
+const STACK_FRAME_PATTERN = /^\s*at\s(?:.+\(.*:\d+:\d+\)|\S+:\d+:\d+)$/;
 
 /**
  * A stack reduced to its frame lines.
  *
  * Dropping only the first line is not enough: V8 puts a multiline `Error.message` across the
  * *leading* lines of `stack`, so `slice(1)` leaves the rest of the message behind, formatted
- * as though it were a frame. Only lines that parse as frames survive, so no part of the
- * message can reach a log record.
+ * as though it were a frame. Only lines that parse as frames survive, so a message cannot
+ * reach a log record **unless a line of it is itself shaped exactly like a frame** - the one
+ * residue, which is also why this is a diagnostic aid rather than a security boundary.
  */
 export function safeStack(error: unknown): string | undefined {
   if (!(error instanceof Error) || typeof error.stack !== "string") {

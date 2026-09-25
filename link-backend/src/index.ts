@@ -2,7 +2,7 @@ import { env } from "./config/env";
 import { logger } from "./config/logger";
 import { createApp } from "./app";
 import { startJobs } from "./jobs";
-import { errorDiagnostics, stackTraceAllowed } from "./utils/safeLog";
+import { errorDiagnostics, safeStack, stackTraceAllowed } from "./utils/safeLog";
 
 const app = createApp();
 
@@ -14,13 +14,14 @@ const server = app.listen(env.PORT, () => {
 startJobs();
 
 // Global error handlers. These log allowlisted fields only: serialising the rejection
-// value or the promise itself is what leaked context into the log sink.
+// value or the promise itself is what leaked context into the log sink. The stack goes
+// through `safeStack` for the same reason - a raw stack's leading lines repeat the message.
 process.on("unhandledRejection", (reason: unknown) => {
   logger.error({
     operation: "process",
     outcome: "unhandled_rejection",
     ...errorDiagnostics(reason),
-    stack: stackTraceAllowed() && reason instanceof Error ? reason.stack : undefined,
+    stack: stackTraceAllowed() ? safeStack(reason) : undefined,
   });
 });
 
@@ -29,7 +30,7 @@ process.on("uncaughtException", (error: Error) => {
     operation: "process",
     outcome: "uncaught_exception",
     ...errorDiagnostics(error),
-    stack: stackTraceAllowed() ? error.stack : undefined,
+    stack: stackTraceAllowed() ? safeStack(error) : undefined,
   });
 
   server.close(() => {

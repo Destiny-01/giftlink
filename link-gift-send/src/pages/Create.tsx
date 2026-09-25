@@ -447,7 +447,7 @@ export default function Create() {
                       recipientType === "email"
                         ? "recipient@example.com"
                         : recipientType === "discord"
-                        ? "username#1234"
+                        ? "username"
                         : "@username"
                     }
                     value={recipientValue}

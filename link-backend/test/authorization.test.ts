@@ -149,6 +149,32 @@ describe("recipient authorization policy", () => {
     }
   });
 
+  test("the provider fixture yields the candidates the policy matches against", () => {
+    // Pins the fixture to the real extraction. A rename in the provider payload would
+    // otherwise produce empty candidates silently: the tests here would still pass while
+    // every handle-addressed claim failed closed in production.
+    const account = makeAuthUserFromProvider({
+      discord: {
+        userId: "998877665544332211",
+        username: "sameuser",
+        discriminator: "9999",
+      },
+      twitter: { userId: "112233445566778899", username: "samehandle" },
+    });
+
+    assert.deepEqual(account.socialIdentifiers.discord, [
+      "998877665544332211",
+      "sameuser",
+      "sameuser#9999",
+    ]);
+    assert.deepEqual(account.socialIdentifiers.twitter, [
+      "112233445566778899",
+      "samehandle",
+    ]);
+    // The persisted columns still take the provider's own id, unchanged.
+    assert.equal(account.discordId, "998877665544332211");
+  });
+
   test("provider-derived candidates authorize a discriminator-qualified gift exactly", () => {
     // Candidates built by the real extraction path, not hand-written: the provider reports a
     // numeric id, a bare handle *and* a discriminator-qualified handle for one account.

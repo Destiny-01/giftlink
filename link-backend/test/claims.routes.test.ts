@@ -1109,6 +1109,52 @@ describe("logging hygiene", () => {
     assert.ok(!logRecords.join("\n").includes(SENSITIVE_FIXTURE));
   });
 
+  test("nothing reaches the raw log stream either", async () => {
+    reset();
+    logRecords.length = 0;
+
+    // The capture above replaces the exported logger's level methods, which cannot see a
+    // record written through a library's own child logger or a bare console call. Watching the
+    // process stream for the duration of one request closes that blind spot.
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    const streamed: string[] = [];
+    const patched = (
+      chunk: unknown,
+      ...rest: unknown[]
+    ): boolean => {
+      streamed.push(String(chunk));
+      return (
+        originalWrite as unknown as (
+          c: unknown,
+          ...r: unknown[]
+        ) => boolean
+      )(chunk, ...rest);
+    };
+    (process.stdout as unknown as { write: typeof patched }).write = patched;
+
+    try {
+      dropLookupFailure = new Error(`connect failed: ${SENSITIVE_FIXTURE}`);
+      await post(
+        `/api/drops/${TEST_DROP_ID}/relay-claim`,
+        RECIPIENT_TOKEN,
+        await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+      );
+    } finally {
+      (process.stdout as unknown as { write: unknown }).write = originalWrite;
+    }
+
+    // The request went through a logging path, so the absence below is meaningful.
+    assert.ok(
+      logRecords.length > 0,
+      "the request logged nothing, so this proves nothing"
+    );
+    assert.equal(
+      streamed.join("").includes(SENSITIVE_FIXTURE),
+      false,
+      "a credential reached the raw log stream"
+    );
+  });
+
   test("synthetic credentials and identifiers never reach the logger", async () => {
     reset();
     logRecords.length = 0;
