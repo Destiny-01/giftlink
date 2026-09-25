@@ -1,40 +1,136 @@
+import { AppError } from "./errors";
+
 /**
  * Allowlisted diagnostic fields for logs.
  *
  * D-008 keeps raw identifiers, credentials and private eligibility data out of public
  * logs, and the audit found whole-object dumps reaching the log sink
- * (`docs/foundation-audit.md` §2.11). Log records should therefore carry a small, named
- * set of fields - operation, outcome, a safe correlation id such as a gift id, and a
+ * (`docs/foundation-audit.md` §2.11). Log records therefore carry a small, named set of
+ * fields - operation, outcome, a safe correlation id such as a gift id, and a
  * transaction hash - rather than serialised requests, transaction objects, user records
  * or errors.
+ *
+ * Nothing composed by a library or a caller is ever logged verbatim. A provider message
+ * can embed the request body, a bearer token, an identifier or transaction calldata, so
+ * copying `error.message` into a log record moves private data *into* the sink rather
+ * than out of it. Only messages this repository authors (`AppError` and its subclasses,
+ * which are also what the client receives) plus machine-readable codes from a fixed shape
+ * are recorded.
  */
 
 export interface ErrorDiagnostics {
-  /** Message only. Never the error object, which is what dragged context into logs. */
+  /**
+   * A controlled label, or an `AppError` message authored in this repository. Never a
+   * third-party message, and never a value a caller supplied.
+   */
   error: string;
+  /** The error's class name, when it looks like one. */
   errorType: string;
+  /** A machine-readable classifier such as an ethers or Prisma code, when present. */
+  errorCode?: string;
+}
+
+const NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,39}$/;
+const CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,31}$/;
+const UNCLASSIFIED = "Unclassified failure";
+
+function safeName(value: unknown, fallback: string): string {
+  return typeof value === "string" && NAME_PATTERN.test(value) ? value : fallback;
+}
+
+function safeCode(error: unknown): string | undefined {
+  const candidate = (error as { code?: unknown } | null)?.code;
+  if (typeof candidate === "string" && CODE_PATTERN.test(candidate)) {
+    return candidate;
+  }
+  if (typeof candidate === "number" && Number.isFinite(candidate)) {
+    return `CODE_${candidate}`;
+  }
+  return undefined;
 }
 
 /**
- * Reduces any thrown value to a type and a message.
+ * Reduces any thrown value to a type, a controlled label and an optional machine code.
  *
- * The message is kept because it is what a human needs to diagnose a failure; the object
- * is not, because serialising it is what leaked request context, transaction payloads and
- * user records into the log sink.
+ * Deliberately never returns `error.message` for a foreign error. Providers, the RPC
+ * client and Prisma all compose messages from the values they were given, so a message is
+ * exactly where a token, an email address or a block of calldata ends up.
  */
 export function errorDiagnostics(error: unknown): ErrorDiagnostics {
-  if (error instanceof Error) {
+  if (error instanceof AppError) {
+    // Authored here, and already the text the client is shown.
     return {
       error: error.message,
-      errorType: error.name || "Error",
+      errorType: safeName(error.name, "AppError"),
     };
   }
 
-  if (typeof error === "string") {
-    return { error, errorType: "Error" };
-  }
+  const errorType = safeName(
+    error instanceof Error ? error.name : undefined,
+    typeof error === "string" ? "ThrownString" : "UnknownError"
+  );
+  const errorCode = safeCode(error);
 
-  return { error: "Non-error value thrown", errorType: "UnknownError" };
+  return errorCode
+    ? { error: UNCLASSIFIED, errorType, errorCode }
+    : { error: UNCLASSIFIED, errorType };
+}
+
+/** The error's class name, when it looks like one. Safe as a diagnostic field. */
+export function errorTypeName(error: unknown): string {
+  return safeName(error instanceof Error ? error.name : undefined, "Error");
+}
+
+/**
+ * A stack with the leading `Name: message` line removed.
+ *
+ * The first line of a V8 stack repeats whatever composed the message, so keeping it would
+ * reintroduce exactly the text the rest of this module exists to keep out of logs. The
+ * frames below it carry file, function and line positions, which is what debugging needs.
+ */
+export function safeStack(error: unknown): string | undefined {
+  if (!(error instanceof Error) || typeof error.stack !== "string") {
+    return undefined;
+  }
+  const frames = error.stack.split("\n").slice(1);
+  return frames.length > 0 ? frames.join("\n") : undefined;
+}
+
+/**
+ * The revert strings `contracts/GiftLink.sol` itself can produce.
+ *
+ * A revert reason is the one piece of free text from a chain call worth recording, and it
+ * is only trustworthy when it is one of ours: anything else came from the node or from a
+ * different contract, so it is dropped rather than logged.
+ */
+const CONTRACT_REVERT_REASONS = new Set([
+  "Invalid USDC address",
+  "Invalid backend signer",
+  "Drop not active",
+  "Only sender",
+  "Amount must be > 0",
+  "Invalid recipient type",
+  "ID collision",
+  "Invalid claimer",
+  "Drop expired",
+  "Permit expired",
+  "Invalid permit signature",
+  "Not a public drop",
+  "Not expired yet",
+  "Invalid signer",
+]);
+
+export function contractRevertReason(error: unknown): string | undefined {
+  const reason = (error as { reason?: unknown } | null)?.reason;
+  return typeof reason === "string" && CONTRACT_REVERT_REASONS.has(reason)
+    ? reason
+    : undefined;
+}
+
+/** Provider/gas failures we can name without echoing anything they composed. */
+export function isInsufficientFundsError(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === "INSUFFICIENT_FUNDS";
 }
 
 /**

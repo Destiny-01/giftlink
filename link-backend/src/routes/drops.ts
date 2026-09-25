@@ -51,7 +51,7 @@ router.post(
 
 router.get(
   "/:id",
-  optionalAuthenticate,
+  optionalAuthenticate(),
   validateParams(dropIdParamSchema),
   asyncHandler(getDropDetailsHandler)
 );
@@ -65,13 +65,15 @@ router.post(
   asyncHandler(issueClaimPermitHandler)
 );
 
-// The relay endpoint is the one path that moves USDC, so it now authenticates like every
-// other mutation on this router. Authorization itself lives in the shared recipient policy
-// that both this route and the permit route use.
+// The relay endpoint is the one path that moves USDC. Authentication is optional here on
+// purpose: wallet-targeted and public gifts are authorized by proof of wallet control and
+// need no account identity, while the shared recipient policy still requires a verified,
+// authenticated identity for identity-targeted gifts. A token that is present but invalid
+// is rejected rather than downgraded to anonymous.
 router.post(
   "/:id/relay-claim",
   claimPermitLimiter,
-  authenticate,
+  optionalAuthenticate({ rejectInvalidToken: true }),
   validateParams(dropIdParamSchema),
   validate(relayClaimSchema),
   asyncHandler(relayClaimHandler)

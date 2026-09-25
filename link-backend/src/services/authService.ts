@@ -19,6 +19,11 @@ type LinkedAccount = PrivyUser extends { linkedAccounts: infer T }
  * `walletAddresses` carries every wallet the provider says this user controls, not just
  * the first one. The single `walletAddress` column on `User` cannot represent a second
  * wallet, so authorization decisions must use this list rather than that column.
+ *
+ * `socialIdentifiers` carries every value the provider reports per social platform. The
+ * provider gives both a numeric id and a handle, and the gift form addresses recipients by
+ * handle (`@username`, `username#1234`), so matching only the id would refuse correctly
+ * authenticated recipients.
  */
 export interface PrivyIdentities {
   walletAddresses: string[];
@@ -29,6 +34,14 @@ export interface PrivyIdentities {
   discordId: string | null;
   twitterId: string | null;
   telegramId: string | null;
+  socialIdentifiers: SocialIdentifiers;
+}
+
+/** Every verified value the provider reports for a social platform. */
+export interface SocialIdentifiers {
+  discord: string[];
+  twitter: string[];
+  telegram: string[];
 }
 
 /** How the provider classifies a linked wallet. */
@@ -132,13 +145,18 @@ export async function verifyPrivyAuthToken(authToken: string) {
 /**
  * Collects every verified identity the provider reports for this account.
  *
- * Social handles are kept exactly as the provider returns them. They are compared
- * case-insensitively at authorization time rather than rewritten here, so this change
- * does not alter stored identity values or introduce alias equivalence.
+ * Social handles are kept exactly as the provider returns them. Authorization compares them
+ * in a normalized form rather than rewriting them here, so this does not alter stored
+ * identity values or introduce alias equivalence.
  */
 export function extractIdentities(privyUser: PrivyUser): PrivyIdentities {
   const walletAddresses: string[] = [];
   const walletKinds: Record<string, WalletKind> = {};
+  const socialIdentifiers: SocialIdentifiers = {
+    discord: [],
+    twitter: [],
+    telegram: [],
+  };
   let email: string | null = null;
   let discordId: string | null = null;
   let twitterId: string | null = null;
@@ -166,24 +184,21 @@ export function extractIdentities(privyUser: PrivyUser): PrivyIdentities {
         break;
       case "discord_oauth":
         if (!discordId) {
-          discordId = accountHasUserId(account)
-            ? account.userId ?? account.username ?? null
-            : null;
+          discordId = primarySocialIdentifier(account);
         }
+        collectSocialCandidates(socialIdentifiers.discord, account);
         break;
       case "twitter_oauth":
         if (!twitterId) {
-          twitterId = accountHasUserId(account)
-            ? account.userId ?? account.username ?? null
-            : null;
+          twitterId = primarySocialIdentifier(account);
         }
+        collectSocialCandidates(socialIdentifiers.twitter, account);
         break;
       case "telegram":
         if (!telegramId) {
-          telegramId = accountHasUserId(account)
-            ? account.userId ?? account.username ?? null
-            : null;
+          telegramId = primarySocialIdentifier(account);
         }
+        collectSocialCandidates(socialIdentifiers.telegram, account);
         break;
       default:
         break;
@@ -198,7 +213,58 @@ export function extractIdentities(privyUser: PrivyUser): PrivyIdentities {
     discordId,
     twitterId,
     telegramId,
+    socialIdentifiers,
   };
+}
+
+/**
+ * The value persisted on `User` for a social platform: the provider's id when it reports
+ * one, otherwise the handle. Unchanged from before, so stored identity values are stable.
+ */
+function primarySocialIdentifier(account: LinkedAccount): string | null {
+  if (!accountHasUserId(account)) {
+    return null;
+  }
+  return account.userId ?? account.username ?? null;
+}
+
+/**
+ * Every verified value the provider reports for one social account.
+ *
+ * These are all facts about a single verified account - its numeric id, its handle, and the
+ * legacy `handle#discriminator` form the gift form also accepts - so collecting them is not
+ * alias merging across accounts.
+ */
+function collectSocialCandidates(
+  target: string[],
+  account: LinkedAccount
+): void {
+  const candidate = account as {
+    userId?: string | null;
+    username?: string | null;
+    discriminator?: string | null;
+  };
+
+  pushCandidate(target, candidate.userId);
+  pushCandidate(target, candidate.username);
+
+  if (
+    typeof candidate.username === "string" &&
+    typeof candidate.discriminator === "string" &&
+    candidate.discriminator
+  ) {
+    pushCandidate(target, `${candidate.username}#${candidate.discriminator}`);
+  }
+}
+
+function pushCandidate(target: string[], value: unknown): void {
+  if (typeof value !== "string") {
+    return;
+  }
+  const trimmed = value.trim();
+  if (trimmed && !target.includes(trimmed)) {
+    target.push(trimmed);
+  }
 }
 
 /**

@@ -54,6 +54,19 @@ export const STRANGER_WALLET = new Wallet(STRANGER_WALLET_KEY).address.toLowerCa
 /** Synthetic private identity value. Never a real address or handle. */
 export const RECIPIENT_EMAIL = "fixture-recipient@example.test";
 export const RECIPIENT_DISCORD = "FixtureRecipient";
+/**
+ * Realistic provider data for a social account: the provider reports a numeric id *and* a
+ * handle, while the gift form addresses recipients by handle.
+ */
+export const RECIPIENT_DISCORD_USER_ID = "998877665544332211";
+export const RECIPIENT_TWITTER = "FixtureHandle";
+export const RECIPIENT_TWITTER_USER_ID = "112233445566778899";
+
+/**
+ * A synthetic value shaped like a credential. Used to prove that it cannot reach a log
+ * record or a response body, whatever a library puts in an error message.
+ */
+export const SENSITIVE_FIXTURE = "fixture-secret-token-84c1d9";
 
 export interface TestAuthUser {
   userId: string;
@@ -65,6 +78,11 @@ export interface TestAuthUser {
   discordId: string | null;
   twitterId: string | null;
   telegramId: string | null;
+  socialIdentifiers: {
+    discord: string[];
+    twitter: string[];
+    telegram: string[];
+  };
 }
 
 export function makeAuthUser(
@@ -82,9 +100,14 @@ export function makeAuthUser(
     ),
     walletAddress: walletAddresses[0] ?? null,
     email: RECIPIENT_EMAIL,
-    discordId: RECIPIENT_DISCORD,
-    twitterId: null,
+    discordId: RECIPIENT_DISCORD_USER_ID,
+    twitterId: RECIPIENT_TWITTER_USER_ID,
     telegramId: null,
+    socialIdentifiers: {
+      discord: [RECIPIENT_DISCORD_USER_ID, RECIPIENT_DISCORD],
+      twitter: [RECIPIENT_TWITTER_USER_ID, RECIPIENT_TWITTER],
+      telegram: [],
+    },
     ...overrides,
   };
 }

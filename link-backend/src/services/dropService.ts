@@ -66,6 +66,11 @@ import {
   readGift,
 } from "./chainEvidence";
 import type { SettlementFacts } from "./chainEvidence";
+import {
+  contractRevertReason,
+  errorDiagnostics,
+  isInsufficientFundsError,
+} from "../utils/safeLog";
 
 const provider: JsonRpcProvider = getRpcProvider();
 const TOKEN_ADDRESS = env.USDC_CONTRACT_ADDRESS.toLowerCase();
@@ -120,7 +125,7 @@ async function calculateGasTankAmount(): Promise<{
       {
         operation: "calculateGasTankAmount",
         outcome: "fallback",
-        errorType: error instanceof Error ? error.name : "UnknownError",
+        ...errorDiagnostics(error),
       },
       "Gas tank estimation failed; using the fallback amount"
     );
@@ -187,7 +192,7 @@ async function lookupUserPrivyId(
       operation: "lookupUserPrivyId",
       outcome: "failure",
       recipientType: recipientTypeToString(recipientType),
-      errorType: error instanceof Error ? error.name : "UnknownError",
+      ...errorDiagnostics(error),
     });
     // If lookup fails, return null (drop can still be created)
     return null;
@@ -356,6 +361,13 @@ export async function confirmDrop(
       `Drop is not pending (current status: ${dropStatusToString(drop.status)})`
     );
   }
+
+  // The deployment is verified before any evidence is accepted. Without this, an RPC pointed
+  // at another chain - where the same address can emit a matching event - would let a funding
+  // record be bound to the wrong chain, and the record would already be wrong by the time the
+  // payout-path checks noticed.
+  await assertConfiguredNetwork(provider);
+  await assertContractConfiguration(provider);
 
   const creation = await fetchVerifiedCreation(txHash, {
     contractAddress: env.GIFTLINK_CONTRACT_ADDRESS,
@@ -798,15 +810,13 @@ export async function relayClaim(
 
     receipt = await tx.wait();
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Unknown submission error";
-
-    if (message.includes("insufficient funds")) {
+    if (isInsufficientFundsError(error)) {
       logger.error({
         operation: "relayClaim",
         outcome: "relayer_funds",
         dropId,
         onchainId: drop.onchainId.toString(),
+        errorCode: "INSUFFICIENT_FUNDS",
       });
       throw new ServiceUnavailableError(
         "Relayer has insufficient balance for gas"
@@ -814,18 +824,23 @@ export async function relayClaim(
     }
 
     // A reverted submission can still mean an earlier attempt already settled this gift.
-    if (message.includes("Drop not active")) {
+    if (contractRevertReason(error) === "Drop not active") {
       return reconcileExistingSettlement(drop, payoutAddress, authUser);
     }
 
+    // Neither the log nor the response echoes what the node composed: a provider message
+    // can carry calldata or arguments. Only a revert string this contract defines is kept.
+    const revertReason = contractRevertReason(error);
     logger.error({
       operation: "relayClaim",
       outcome: "transaction_failed",
       dropId,
       onchainId: drop.onchainId.toString(),
-      errorMessage: message,
+      ...errorDiagnostics(error),
+      ...(revertReason ? { revertReason } : {}),
     });
-    throw new ValidationError(`Claim transaction failed: ${message}`);
+
+    throw new ValidationError(relayFailureMessage(revertReason));
   }
 
   // 4. The settlement comes from the contract's own event, not from the receipt status.
@@ -855,6 +870,24 @@ export async function relayClaim(
       relayerReimbursed: facts.amountToRelayer.toString(),
     },
   };
+}
+
+/**
+ * Controlled client-facing text for a failed relay submission.
+ *
+ * Built from the taxonomy of failures we can name rather than from the provider's own
+ * message, which may embed calldata or arguments.
+ */
+function relayFailureMessage(revertReason: string | undefined): string {
+  switch (revertReason) {
+    case "Drop expired":
+      return "This gift has expired and can no longer be claimed.";
+    case "Permit expired":
+    case "Invalid permit signature":
+      return "This service could not authorize the claim. Please retry, and report the gift link if it persists.";
+    default:
+      return "The claim transaction failed on-chain. Please retry, and report the gift link if it persists.";
+  }
 }
 
 /**
@@ -1468,6 +1501,8 @@ function dropStatusFromString(status: string): DropStatus {
     case "expired":
       return DropStatus.EXPIRED;
     default:
-      throw new ValidationError(`Invalid drop status filter: ${status}`);
+      // The rejected value is not echoed: it is caller-supplied, and this message is both
+      // returned and logged.
+      throw new ValidationError("Invalid drop status filter");
   }
 }

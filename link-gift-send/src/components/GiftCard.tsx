@@ -44,6 +44,17 @@ export function GiftCard({ gift, onRevoke, onEdit, onClick }: GiftCardProps) {
     gift.recipientType !== "public" &&
     onEdit !== undefined;
 
+  /**
+   * A funded gift's recipient commitment lives on-chain, and the backend cannot change it:
+   * only the sender's own wallet can call the contract's `updateReceiver`. The API therefore
+   * refuses to edit a gift that already has an on-chain id, so the action is shown as
+   * unavailable here rather than offered and then refused.
+   */
+  const editUnavailable = canEdit && gift.onchainId !== undefined;
+  const editUnavailableReason =
+    "This gift is already funded on-chain, so its recipient can only be changed from the " +
+    "sending wallet. Revoke it and create a new gift instead.";
+
   return (
     <Card
       className="group relative cursor-pointer border border-white/[0.04] bg-card p-4 transition-all hover:-translate-y-1 hover:border-accent/20 hover:shadow-[0_6px_30px_rgba(1,8,16,0.6),0_0_20px_rgba(0,255,209,0.1)]"
@@ -143,10 +154,22 @@ export function GiftCard({ gift, onRevoke, onEdit, onClick }: GiftCardProps) {
             {canEdit && onEdit && (
               <>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onEdit(gift.id)}>
+                <DropdownMenuItem
+                  onClick={() => onEdit(gift.id)}
+                  disabled={editUnavailable}
+                  title={editUnavailable ? editUnavailableReason : undefined}
+                >
                   <Edit className="mr-2 h-4 w-4" />
                   Edit Receiver
                 </DropdownMenuItem>
+                {editUnavailable && (
+                  <DropdownMenuItem
+                    disabled
+                    className="max-w-[16rem] whitespace-normal text-xs text-muted-foreground"
+                  >
+                    {editUnavailableReason}
+                  </DropdownMenuItem>
+                )}
               </>
             )}
             {canRevoke && onRevoke && (

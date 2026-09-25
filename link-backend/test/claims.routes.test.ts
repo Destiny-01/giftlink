@@ -3,10 +3,15 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 
 import {
+  RECIPIENT_DISCORD,
+  RECIPIENT_DISCORD_USER_ID,
   RECIPIENT_EMAIL,
   RECIPIENT_SECOND_WALLET,
+  RECIPIENT_TWITTER,
+  RECIPIENT_TWITTER_USER_ID,
   RECIPIENT_WALLET,
   RECIPIENT_WALLET_KEY,
+  SENSITIVE_FIXTURE,
   STRANGER_WALLET,
   STRANGER_WALLET_KEY,
   TEST_CHAIN_ID,
@@ -77,6 +82,13 @@ interface SyntheticAccount {
   privyUserId: string;
   email: string | null;
   wallets: string[];
+  /**
+   * Realistic provider payloads: a social linked account carries its own numeric id *and* a
+   * handle, which is precisely the mismatch that used to reject correctly authenticated
+   * recipients addressed by handle.
+   */
+  discord?: { userId: string; username: string; discriminator?: string };
+  twitter?: { userId: string; username: string };
 }
 
 const accountsByToken: Record<string, SyntheticAccount> = {
@@ -89,6 +101,15 @@ const accountsByToken: Record<string, SyntheticAccount> = {
     privyUserId: RECIPIENT_PRIVY_ID,
     email: RECIPIENT_EMAIL,
     wallets: [RECIPIENT_WALLET, RECIPIENT_SECOND_WALLET],
+    discord: {
+      userId: RECIPIENT_DISCORD_USER_ID,
+      username: RECIPIENT_DISCORD,
+      discriminator: "1234",
+    },
+    twitter: {
+      userId: RECIPIENT_TWITTER_USER_ID,
+      username: RECIPIENT_TWITTER,
+    },
   },
   [STRANGER_TOKEN]: {
     privyUserId: STRANGER_PRIVY_ID,
@@ -127,6 +148,25 @@ const privyModule = require("../src/config/privy") as typeof import("../src/conf
       ...(account.email
         ? [{ type: "email", address: account.email }]
         : []),
+      ...(account.discord
+        ? [
+            {
+              type: "discord_oauth",
+              userId: account.discord.userId,
+              username: account.discord.username,
+              discriminator: account.discord.discriminator,
+            },
+          ]
+        : []),
+      ...(account.twitter
+        ? [
+            {
+              type: "twitter_oauth",
+              userId: account.twitter.userId,
+              username: account.twitter.username,
+            },
+          ]
+        : []),
     ],
   };
 };
@@ -153,7 +193,12 @@ prisma.user.upsert = async ({ where }: { where: { privyId: string } }) => {
 };
 prisma.user.findUnique = async () => null;
 prisma.user.findFirst = async () => null;
-prisma.drop.findUnique = async () => currentDrop;
+prisma.drop.findUnique = async () => {
+  if (dropLookupFailure) {
+    throw dropLookupFailure;
+  }
+  return currentDrop;
+};
 prisma.drop.findFirst = async () => null;
 prisma.drop.update = async (args: { data: Record<string, unknown> }) => {
   dropUpdates.push(args);
@@ -175,6 +220,14 @@ prisma.$transaction = async (arg: unknown) =>
 let chainNetworkChecks = 0;
 
 /**
+ * Deployment and persistence faults, so the regression cases can prove the code fails closed
+ * (and stays quiet about it) instead of trusting a mismatched chain or a library's message.
+ */
+let networkBehaviour: "valid" | "wrong_chain" = "valid";
+let contractConfigBehaviour: "valid" | "wrong_usdc" = "valid";
+let dropLookupFailure: Error | null = null;
+
+/**
  * The RPC endpoint is the second seam. Stubbing the provider's own methods means the real
  * ABI decoding, event matching and authorization code all still run.
  */
@@ -184,7 +237,13 @@ const signerAddress = (require("../src/config/wallets") as typeof import("../src
 
 provider.getNetwork = async () => {
   chainNetworkChecks += 1;
-  return { chainId: BigInt(TEST_CHAIN_ID), name: "test" };
+  return {
+    chainId:
+      networkBehaviour === "wrong_chain"
+        ? BigInt(TEST_CHAIN_ID + 1)
+        : BigInt(TEST_CHAIN_ID),
+    name: "test",
+  };
 };
 // A zero relayer balance stops the relay flow at the last gate before sending.
 provider.getBalance = async () => 0n;
@@ -297,7 +356,11 @@ provider.call = async (tx: { data?: string }) => {
   const selector = String(tx.data ?? "").slice(0, 10);
 
   if (selector === giftLinkInterface.getFunction("USDC")!.selector) {
-    return giftLinkInterface.encodeFunctionResult("USDC", [TEST_USDC_ADDRESS]);
+    return giftLinkInterface.encodeFunctionResult("USDC", [
+      contractConfigBehaviour === "wrong_usdc"
+        ? "0x" + "77".repeat(20)
+        : TEST_USDC_ADDRESS,
+    ]);
   }
   if (selector === giftLinkInterface.getFunction("backendSigner")!.selector) {
     return giftLinkInterface.encodeFunctionResult("backendSigner", [
@@ -377,15 +440,78 @@ Timestamp: ${issuedAt}`;
   };
 }
 
+/**
+ * The routes under test are rate limited, and this suite deliberately makes many claim
+ * attempts from one address. Clearing the counters between cases keeps each case independent
+ * instead of measuring the previous ones.
+ */
+const rateLimiters = require("../src/middleware/rateLimiter") as typeof import("../src/middleware/rateLimiter");
+const chainEvidenceModule = require("../src/services/chainEvidence") as typeof import("../src/services/chainEvidence");
+
+function clearRateLimits() {
+  for (const limiter of [
+    rateLimiters.claimPermitLimiter,
+    rateLimiters.dropMutationLimiter,
+  ]) {
+    const resettable = limiter as unknown as {
+      store?: { resetAll?: () => void };
+      resetKey?: (key: string) => void;
+    };
+
+    if (resettable.store?.resetAll) {
+      resettable.store.resetAll();
+    } else {
+      for (const key of ["127.0.0.1", "::ffff:127.0.0.1", "::1"]) {
+        resettable.resetKey?.(key);
+      }
+    }
+  }
+}
+
 const reset = () => {
   currentDrop = recipientDrop();
   settlementBehaviour = "valid";
   creationBehaviour = "valid";
   giftStatus = 0;
+  networkBehaviour = "valid";
+  contractConfigBehaviour = "valid";
+  dropLookupFailure = null;
   settlementWrites.length = 0;
   dropUpdates.length = 0;
   chainNetworkChecks = 0;
+  clearRateLimits();
+  // The deployed-contract view is cached in production (with a TTL), so a case that changes
+  // what the deployment reports has to start from an empty cache.
+  chainEvidenceModule.resetContractViewCache();
 };
+
+/** A wallet-targeted gift: the payout address is the sender's chosen address. */
+function walletTargetedDrop() {
+  const drop = makeDrop({
+    recipientType: "WALLET",
+    recipientIdentifier: RECIPIENT_WALLET.toLowerCase(),
+  });
+  drop.recipientCommit = computeRecipientCommit(
+    RecipientType.WALLET,
+    RECIPIENT_WALLET.toLowerCase(),
+    drop.id
+  );
+  return drop;
+}
+
+/** A public gift: first-claim-wins, addressed to nobody in particular. */
+function publicGift() {
+  const drop = makeDrop({
+    recipientType: "PUBLIC",
+    recipientIdentifier: "",
+  });
+  drop.recipientCommit = computeRecipientCommit(
+    RecipientType.PUBLIC,
+    "",
+    drop.id
+  );
+  return drop;
+}
 
 describe("relay claim endpoint", () => {
   test("an unauthenticated caller is refused and never reaches the chain layer", async () => {
@@ -707,9 +833,203 @@ describe("creation confirmation", () => {
     assert.equal(response.status, 409);
     assert.equal(dropUpdates.length, 0);
   });
+
+  test("a confirmation from the wrong chain binds nothing", async () => {
+    reset();
+    currentDrop = pendingDrop();
+    networkBehaviour = "wrong_chain";
+
+    const response = await post("/api/drops/confirm", SENDER_TOKEN, confirmBody());
+
+    assert.equal(response.status, 503);
+    assert.equal(dropUpdates.length, 0, "a record was bound from the wrong chain");
+  });
+
+  test("a confirmation against a mismatched deployment binds nothing", async () => {
+    reset();
+    currentDrop = pendingDrop();
+    contractConfigBehaviour = "wrong_usdc";
+
+    const response = await post("/api/drops/confirm", SENDER_TOKEN, confirmBody());
+
+    assert.equal(response.status, 503);
+    assert.equal(dropUpdates.length, 0);
+  });
+});
+
+describe("signature-only access is preserved where the policy allows it", () => {
+  test("an unauthenticated caller with a valid signature can claim a wallet-targeted gift", async () => {
+    reset();
+    currentDrop = walletTargetedDrop();
+
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      undefined,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    // It gets past authorization and the deployment checks, and stops at the relayer balance
+    // gate rather than at an access check. `getNetwork` is the counter: one call means the
+    // deployment was consulted at all.
+    assert.ok(chainNetworkChecks > 0, "did not reach the deployment checks");
+    assert.equal(response.status, 503);
+  });
+
+  test("an unauthenticated caller with a valid signature can claim a public gift", async () => {
+    reset();
+    currentDrop = publicGift();
+
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      undefined,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    assert.ok(chainNetworkChecks > 0, "did not reach the deployment checks");
+    assert.equal(response.status, 503);
+  });
+
+  test("an unauthenticated caller cannot claim an identity-targeted gift", async () => {
+    reset();
+
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      undefined,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    assert.equal(response.status, 401);
+    assert.equal(chainNetworkChecks, 0, "reached the chain layer without an identity");
+  });
+
+  test("a token that is present but invalid is rejected rather than ignored", async () => {
+    reset();
+
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      "token-not-a-real-session",
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    assert.equal(response.status, 401);
+    assert.equal(chainNetworkChecks, 0);
+  });
+});
+
+describe("a gift addressed by social handle", () => {
+  test("the owning account can claim it through the real route", async () => {
+    reset();
+    currentDrop = makeDrop({
+      recipientType: "DISCORD",
+      recipientIdentifier: `${RECIPIENT_DISCORD}#1234`.toLowerCase(),
+      recipientPrivyId: null,
+    });
+    currentDrop.recipientCommit = computeRecipientCommit(
+      RecipientType.DISCORD,
+      `${RECIPIENT_DISCORD}#1234`.toLowerCase(),
+      currentDrop.id
+    );
+
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      RECIPIENT_TOKEN,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    // The recipient signed up after the gift was created, so no privy id was stored on it.
+    assert.equal(currentDrop.recipientPrivyId, null);
+    assert.ok(
+      chainNetworkChecks > 0,
+      "authorization was refused for the handle owner"
+    );
+    assert.equal(response.status, 503);
+  });
+
+  test("a handle that is not the caller's is refused", async () => {
+    reset();
+    currentDrop = makeDrop({
+      recipientType: "TWITTER",
+      recipientIdentifier: "@somebodyelse",
+    });
+    currentDrop.recipientCommit = computeRecipientCommit(
+      RecipientType.TWITTER,
+      "@somebodyelse",
+      currentDrop.id
+    );
+
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      RECIPIENT_TOKEN,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    assert.equal(response.status, 403);
+    assert.equal(chainNetworkChecks, 0);
+  });
 });
 
 describe("logging hygiene", () => {
+  test("a synthetic credential never reaches a response or a log", async () => {
+    reset();
+    logRecords.length = 0;
+    // A failure whose message carries a credential-shaped value, exactly as a provider,
+    // Prisma or the RPC client can produce. It must not be echoed anywhere.
+    dropLookupFailure = new Error(`connect failed: ${SENSITIVE_FIXTURE}`);
+
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      RECIPIENT_TOKEN,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+    const body = await response.text();
+
+    assert.ok(
+      !body.includes(SENSITIVE_FIXTURE),
+      `the response echoed a credential: ${body}`
+    );
+    assert.ok(
+      !logRecords.join("\n").includes(SENSITIVE_FIXTURE),
+      "a log record carried a credential"
+    );
+  });
+
+  test("a thrown string is not echoed either", async () => {
+    reset();
+    logRecords.length = 0;
+    dropLookupFailure = new Error(SENSITIVE_FIXTURE);
+
+    await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      RECIPIENT_TOKEN,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    assert.ok(!logRecords.join("\n").includes(SENSITIVE_FIXTURE));
+  });
+
+  test("validation failures do not echo the rejected value", async () => {
+    reset();
+    logRecords.length = 0;
+
+    // An enum violation is one of the Zod messages that names what it received.
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/claim-permit`,
+      RECIPIENT_TOKEN,
+      {
+        claimerAddress: RECIPIENT_WALLET,
+        walletType: SENSITIVE_FIXTURE,
+      }
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 400);
+    assert.ok(
+      !body.includes(SENSITIVE_FIXTURE),
+      `the response echoed the rejected value: ${body}`
+    );
+    assert.ok(!logRecords.join("\n").includes(SENSITIVE_FIXTURE));
+  });
+
   test("synthetic credentials and identifiers never reach the logger", async () => {
     reset();
     logRecords.length = 0;
@@ -738,6 +1058,7 @@ describe("logging hygiene", () => {
       STRANGER_EMAIL,
       STRANGER_PRIVY_ID,
       RECIPIENT_PRIVY_ID,
+      SENSITIVE_FIXTURE,
     ]) {
       assert.ok(
         !captured.includes(secret),

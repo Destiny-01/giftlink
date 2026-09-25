@@ -79,10 +79,9 @@ export async function relayClaimHandler(req: AuthRequest, res: Response) {
   const { id } = req.params;
   const authUser = req.authUser;
 
-  if (!authUser?.privyUserId) {
-    throw new ForbiddenError("Authenticated user is required");
-  }
-
+  // No blanket authentication requirement here: whether an account is needed depends on the
+  // gift. `assertClaimAuthorized` requires one for identity-targeted gifts and accepts the
+  // proven wallet-control signature for wallet-targeted and public ones.
   const response = await relayClaim(id, body, authUser);
   res.json(response);
 }

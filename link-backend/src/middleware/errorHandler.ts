@@ -1,7 +1,11 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../utils/errors";
 import { logger } from "../config/logger";
-import { errorDiagnostics, stackTraceAllowed } from "../utils/safeLog";
+import {
+  errorDiagnostics,
+  safeStack,
+  stackTraceAllowed,
+} from "../utils/safeLog";
 
 export function errorHandler(
   err: Error | AppError,
@@ -10,7 +14,9 @@ export function errorHandler(
   _next: NextFunction
 ) {
   const diagnostics = errorDiagnostics(err);
-  const stack = stackTraceAllowed() ? err.stack : undefined;
+  // Frames only: the first line of a stack repeats the message, which for a foreign error
+  // is the text this module exists to keep out of the log sink.
+  const stack = stackTraceAllowed() ? safeStack(err) : undefined;
 
   if (err instanceof AppError) {
     logger.error({
