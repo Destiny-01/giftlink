@@ -82,26 +82,30 @@ export function errorTypeName(error: unknown): string {
 }
 
 /**
- * V8's frame lines.
- *
- * Either `at fn (path:line:col)` (`at async fn (...)`, `at eval (eval at a.ts:1:1, <anon>:2:3)`)
- * or a bare `at path:line:col`. Requiring the source position, and requiring the
- * parenthesised form to be free of the shape a sentence would have, is what distinguishes a
- * frame from a line of a message that merely starts with "at ".
+ * V8's frame lines: `at fn (path:line:col)` (`at async fn (...)`, `at eval (eval at a.ts:1:1,
+ * <anon>:2:3)`) or a bare `at path:line:col`. Used only to strip the leading line from an
+ * error this repository authored; it is not a provenance check.
  */
 const STACK_FRAME_PATTERN = /^\s*at\s(?:.+\(.*:\d+:\d+\)|\S+:\d+:\d+)$/;
 
 /**
- * A stack reduced to its frame lines.
+ * A stack for errors this repository authored, and nothing for anyone else's.
  *
- * Dropping only the first line is not enough: V8 puts a multiline `Error.message` across the
- * *leading* lines of `stack`, so `slice(1)` leaves the rest of the message behind, formatted
- * as though it were a frame. Only lines that parse as frames survive, so a message cannot
- * reach a log record **unless a line of it is itself shaped exactly like a frame** - the one
- * residue, which is also why this is a diagnostic aid rather than a security boundary.
+ * `Error.stack` is a single string: V8 formats it as `Name: message` followed by the frames,
+ * so a multiline message occupies leading lines that sit in the same string as the frames.
+ * **No filter over that string can tell a message line from a frame** - a message line that
+ * happens to be frame-shaped survives any pattern, which is why an earlier attempt at this
+ * was wrong and why the residue cannot be documented away. Provenance is not recoverable by
+ * parsing, so it is not attempted:
+ *
+ * - an `AppError` message is authored here and already returned to the client, so its stack
+ *   adds nothing that is not already logged, and the leading line is stripped anyway;
+ * - a foreign error contributes **no stack at all**. Its frames are lost, which is a real
+ *   cost to diagnosis and is recorded as a residual risk in the pull request; the caller
+ *   still gets the operation, the outcome, the error class and any machine code.
  */
 export function safeStack(error: unknown): string | undefined {
-  if (!(error instanceof Error) || typeof error.stack !== "string") {
+  if (!(error instanceof AppError) || typeof error.stack !== "string") {
     return undefined;
   }
 

@@ -1080,10 +1080,58 @@ describe("logging hygiene", () => {
       false,
       "a multiline message leaked into the captured logs"
     );
-    assert.ok(
-      captured.includes("at "),
-      "frames should still be logged, or diagnosis loses its value"
+
+    // The failure is a foreign error, so it contributes no stack at all.
+    for (const record of logRecords) {
+      assert.equal(
+        record.includes('"stack"'),
+        false,
+        `a stack was logged for a foreign error: ${record.slice(0, 160)}`
+      );
+    }
+  });
+
+  test("a message line shaped like a stack frame does not reach the logs", async () => {
+    reset();
+    logRecords.length = 0;
+    // Filtering the concatenated stack cannot separate this from a genuine frame, which is
+    // why provenance is not inferred by parsing at all.
+    dropLookupFailure = new Error(
+      `provider failure\n    at ${SENSITIVE_FIXTURE} (/provider.ts:1:1)`
     );
+
+    await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      RECIPIENT_TOKEN,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    assert.equal(
+      logRecords.join("\n").includes(SENSITIVE_FIXTURE),
+      false,
+      "a frame-shaped message line reached the logs"
+    );
+  });
+
+  test("our own errors still log frames", async () => {
+    reset();
+    logRecords.length = 0;
+
+    // A recipient-policy refusal is an error this repository authored, so its frames are the
+    // one stack a request still produces. Losing those would cost the diagnosis that made
+    // omitting foreign stacks acceptable.
+    await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      STRANGER_TOKEN,
+      await relayBody(STRANGER_WALLET, STRANGER_WALLET_KEY)
+    );
+
+    const captured = logRecords.join("\n");
+    assert.ok(
+      captured.includes('"stack"'),
+      "an authored error should still contribute frames"
+    );
+    assert.ok(captured.includes("at "), "frames should be present");
   });
 
   test("validation failures do not echo the rejected value", async () => {

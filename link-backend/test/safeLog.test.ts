@@ -53,26 +53,43 @@ describe("error diagnostics", () => {
     assert.equal(diagnostics.errorType, "ValidationError");
   });
 
-  test("a stack contributes frames, never any part of the message", () => {
-    const single = safeStack(new Error(`failed with ${SENSITIVE_FIXTURE}`));
-    assert.ok(single, "expected frames to survive");
-    assert.equal(single.includes(SENSITIVE_FIXTURE), false);
+  test("a foreign error contributes no stack at all", () => {
+    // `Error.stack` concatenates the message with the frames, and no filter can tell the two
+    // apart: a message line that is itself frame-shaped survives any pattern. Provenance is
+    // therefore not inferred by parsing, so a foreign stack is omitted rather than filtered.
+    assert.equal(safeStack(new Error(`failed with ${SENSITIVE_FIXTURE}`)), undefined);
 
-    // V8 spreads a multiline message across the *leading* lines of `stack`, so dropping only
-    // the first line leaves the rest of the message behind, formatted as though it were a
-    // frame. That is what makes `slice(1)` insufficient.
-    const multiline = safeStack(
-      new Error(`provider failure\n${SENSITIVE_FIXTURE}\nand more of the message`)
-    );
-
-    assert.ok(multiline, "expected frames to survive");
     assert.equal(
-      multiline.includes(SENSITIVE_FIXTURE),
-      false,
-      "a multiline message leaked through the stack"
+      safeStack(new Error(`provider failure\n${SENSITIVE_FIXTURE}\nand more`)),
+      undefined
     );
 
-    for (const line of multiline.split("\n")) {
+    // The shape a reviewer reproduced: a message continuation that looks exactly like a frame.
+    assert.equal(
+      safeStack(
+        new Error(
+          `provider failure\n    at synthetic-private-fixture (/provider.ts:1:1)`
+        )
+      ),
+      undefined
+    );
+
+    assert.equal(safeStack(SENSITIVE_FIXTURE), undefined);
+  });
+
+  test("our own errors keep frames, without the leading line", () => {
+    const stack = safeStack(
+      new ValidationError("Drop is not confirmed on-chain yet")
+    );
+
+    assert.ok(stack, "expected frames to survive for an authored error");
+    assert.equal(
+      stack.includes("Drop is not confirmed"),
+      false,
+      "the message line should not survive"
+    );
+
+    for (const line of stack.split("\n")) {
       assert.match(
         line,
         /^\s*at\s/,
