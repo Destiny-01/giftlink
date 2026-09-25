@@ -226,6 +226,10 @@ let chainNetworkChecks = 0;
 let networkBehaviour: "valid" | "wrong_chain" = "valid";
 let contractConfigBehaviour: "valid" | "wrong_usdc" = "valid";
 let dropLookupFailure: Error | null = null;
+/** How the claim submission itself behaves when it reaches the contract. */
+let relaySubmitBehaviour: "ok" | "mined_revert" = "ok";
+/** The relayer's native balance. Zero stops the relay flow before it submits anything. */
+let relayerBalance = 0n;
 
 /**
  * The RPC endpoint is the second seam. Stubbing the provider's own methods means the real
@@ -246,7 +250,33 @@ provider.getNetwork = async () => {
   };
 };
 // A zero relayer balance stops the relay flow at the last gate before sending.
-provider.getBalance = async () => 0n;
+provider.getBalance = async () => relayerBalance;
+/**
+ * Submission. A transaction that is mined and then reverts is the case worth stubbing: ethers
+ * reports it with the failed receipt and **no reason at all**, so a reason-only check would
+ * treat it as an unknown failure and never try to recover the settlement that may exist.
+ */
+provider.estimateGas = async () => 21_000n;
+// The signer populates the transaction before signing, so the submission path also needs the
+// nonce and the fee data; without them it fails before it ever reaches the contract.
+provider.getTransactionCount = async () => 1;
+provider.getFeeData = async () => ({
+  gasPrice: 1_000_000_000n,
+  maxFeePerGas: 1_000_000_000n,
+  maxPriorityFeePerGas: 1_000_000_000n,
+});
+provider.broadcastTransaction = async () => ({
+  hash: SETTLEMENT_TX_HASH,
+  wait: async () => {
+    if (relaySubmitBehaviour === "mined_revert") {
+      throw Object.assign(new Error("transaction execution reverted"), {
+        code: "CALL_EXCEPTION",
+        receipt: { status: 0 },
+      });
+    }
+    throw new Error("unexpected mined transaction in test");
+  },
+});
 provider.getBlock = async () => ({ timestamp: 1_770_000_000 });
 provider.getBlockNumber = async () => 500;
 // Log queries back the "already settled, recover it" path, which reads the settlement the
@@ -476,6 +506,8 @@ const reset = () => {
   networkBehaviour = "valid";
   contractConfigBehaviour = "valid";
   dropLookupFailure = null;
+  relaySubmitBehaviour = "ok";
+  relayerBalance = 0n;
   settlementWrites.length = 0;
   dropUpdates.length = 0;
   chainNetworkChecks = 0;
@@ -729,6 +761,27 @@ describe("settlement recording", () => {
 });
 
 describe("expiry-only recovery and relay retries", () => {
+  test("a submission that reverts because the gift is gone recovers the real settlement", async () => {
+    reset();
+    // The retry raced an earlier attempt: the gift is already settled on-chain, so this
+    // submission is mined and reverts, carrying no reason to match on.
+    relaySubmitBehaviour = "mined_revert";
+    relayerBalance = 10n ** 18n;
+
+    const response = await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      RECIPIENT_TOKEN,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    assert.equal(response.status, 200);
+    const body = (await response.json()) as { txHash: string };
+    assert.equal(body.txHash, SETTLEMENT_TX_HASH);
+    // Converged onto the settlement the contract already holds, exactly once.
+    assert.equal(settlementWrites.length, 1);
+    assert.equal(settlementWrites[0].data.claimTxHash, SETTLEMENT_TX_HASH);
+  });
+
   test("a relay retry after a chain success converges without a second payout", async () => {
     reset();
     // The previous attempt landed but its response never arrived, so the contract reports

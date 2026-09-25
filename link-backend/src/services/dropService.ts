@@ -70,6 +70,7 @@ import {
   contractRevertReason,
   errorDiagnostics,
   isInsufficientFundsError,
+  isMinedRevert,
 } from "../utils/safeLog";
 
 const provider: JsonRpcProvider = getRpcProvider();
@@ -739,7 +740,7 @@ export async function relayClaim(
   if (onchain.status === ONCHAIN_DROP_STATUS.CLAIMED) {
     // A retry after a chain success that never reached the client. Converge on the
     // settlement the contract already recorded instead of paying a second time.
-    return reconcileExistingSettlement(drop, payoutAddress, authUser);
+    return reconcileExistingSettlement(drop, payoutAddress, authUser, "claimed");
   }
 
   if (onchain.status !== ONCHAIN_DROP_STATUS.ACTIVE) {
@@ -824,13 +825,24 @@ export async function relayClaim(
     }
 
     // A reverted submission can still mean an earlier attempt already settled this gift.
-    if (contractRevertReason(error) === "Drop not active") {
-      return reconcileExistingSettlement(drop, payoutAddress, authUser);
+    // Two shapes have to be handled: a revert caught while estimating carries a reason, while
+    // a revert that was mined carries the failed receipt and no reason at all
+    // (`tx.wait()` attaches it to the thrown error).
+    const revertReason = contractRevertReason(error);
+    if (
+      revertReason === "Drop not active" ||
+      isMinedRevert(error)
+    ) {
+      return reconcileExistingSettlement(
+        drop,
+        payoutAddress,
+        authUser,
+        "reverted"
+      );
     }
 
     // Neither the log nor the response echoes what the node composed: a provider message
     // can carry calldata or arguments. Only a revert string this contract defines is kept.
-    const revertReason = contractRevertReason(error);
     logger.error({
       operation: "relayClaim",
       outcome: "transaction_failed",
@@ -893,14 +905,20 @@ function relayFailureMessage(revertReason: string | undefined): string {
 /**
  * Converges on a settlement the contract already recorded.
  *
- * Used when the chain reports the gift as claimed: either the previous attempt actually
- * landed, or someone else settled it. The existing canonical event supplies every
- * recorded fact, so a lost response costs nothing and can never produce a second payout.
+ * Used when the chain reports the gift as claimed, or when a submission reverted, because
+ * either can mean an earlier attempt actually landed. The existing canonical event supplies
+ * every recorded fact, so a lost response costs nothing and can never produce a second
+ * payout.
+ *
+ * @param mode how the caller arrived here, which decides what it means when no settlement
+ *   exists: the chain reporting the gift as claimed while no event can be read is a
+ *   deployment anomaly, whereas a revert simply had another cause.
  */
 async function reconcileExistingSettlement(
   drop: Drop,
   payoutAddress: string,
-  authUser?: AuthenticatedUser
+  authUser: AuthenticatedUser | undefined,
+  mode: "claimed" | "reverted"
 ): Promise<RelayClaimResponse> {
   if (!drop.onchainId) {
     throw new ValidationError("Drop is not confirmed on-chain yet");
@@ -908,6 +926,12 @@ async function reconcileExistingSettlement(
 
   const facts = await findSettlementForGift(drop.onchainId);
   if (!facts) {
+    if (mode === "reverted") {
+      throw new ValidationError(
+        "The claim transaction was rejected on-chain and the gift is not settled. Please retry."
+      );
+    }
+
     throw new ConfigurationError(
       `Gift ${drop.onchainId.toString()} is claimed on-chain, but no DropClaimed event for it could be read. ` +
         "Refusing to guess what happened to it."

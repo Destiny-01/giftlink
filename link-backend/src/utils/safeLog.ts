@@ -96,6 +96,9 @@ export function safeStack(error: unknown): string | undefined {
   return frames.length > 0 ? frames.join("\n") : undefined;
 }
 
+/** The prefix ethers attaches to a reason it extracted from a revert. */
+const REVERT_PREFIX = /^execution reverted:?\s*/i;
+
 /**
  * The revert strings `contracts/GiftLink.sol` itself can produce.
  *
@@ -121,16 +124,50 @@ const CONTRACT_REVERT_REASONS = new Set([
 ]);
 
 export function contractRevertReason(error: unknown): string | undefined {
-  const reason = (error as { reason?: unknown } | null)?.reason;
-  return typeof reason === "string" && CONTRACT_REVERT_REASONS.has(reason)
-    ? reason
-    : undefined;
+  const candidate = error as {
+    reason?: unknown;
+    shortMessage?: unknown;
+  } | null;
+
+  for (const value of [candidate?.reason, candidate?.shortMessage]) {
+    if (typeof value !== "string") {
+      continue;
+    }
+
+    // ethers often reports the revert with its own prefix attached. Only the prefix is
+    // stripped: the remainder still has to be one of our strings exactly, so a node cannot
+    // get arbitrary text recorded by wrapping it.
+    const stripped = value.replace(REVERT_PREFIX, "").trim();
+    if (CONTRACT_REVERT_REASONS.has(stripped)) {
+      return stripped;
+    }
+  }
+
+  return undefined;
 }
 
 /** Provider/gas failures we can name without echoing anything they composed. */
 export function isInsufficientFundsError(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
   return code === "INSUFFICIENT_FUNDS";
+}
+
+/**
+ * A transaction that was mined and reverted.
+ *
+ * ethers reports this shape with no reason at all: a `CALL_EXCEPTION` carrying the failed
+ * receipt. It is worth naming separately because it can mean an earlier attempt already
+ * settled the gift, which a caller should reconcile rather than report as a failure -
+ * `contractRevertReason` alone misses it, since a reason is only present when the revert
+ * was caught while estimating.
+ */
+export function isMinedRevert(error: unknown): boolean {
+  const candidate = error as {
+    code?: unknown;
+    receipt?: { status?: unknown };
+  } | null;
+
+  return candidate?.code === "CALL_EXCEPTION" && candidate?.receipt?.status === 0;
 }
 
 /**

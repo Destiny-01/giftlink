@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 
 import { SENSITIVE_FIXTURE } from "./setup";
 
-const {
+import {
   contractRevertReason,
   errorDiagnostics,
+  isMinedRevert,
   safeStack,
-} = require("../src/utils/safeLog") as typeof import("../src/utils/safeLog");
+} from "../src/utils/safeLog";
 const { ValidationError, ChainEvidenceError } = require("../src/utils/errors") as typeof import("../src/utils/errors");
 
 describe("error diagnostics", () => {
@@ -71,6 +72,30 @@ describe("error diagnostics", () => {
       ),
       undefined
     );
+  });
+
+  test("a mined revert is named, because it carries no reason", () => {
+    // `tx.wait()` reports a reverted transaction this way: the failed receipt is attached and
+    // there is no `reason`, so a reason-only check would treat it as an unknown failure and
+    // never try to recover the settlement that may already exist.
+    const mined = Object.assign(new Error("transaction execution reverted"), {
+      code: "CALL_EXCEPTION",
+      receipt: { status: 0 },
+    });
+
+    assert.equal(contractRevertReason(mined), undefined);
+    assert.equal(isMinedRevert(mined), true);
+    // A successful receipt is not a revert, and neither is an unrelated failure.
+    assert.equal(
+      isMinedRevert(
+        Object.assign(new Error("x"), {
+          code: "CALL_EXCEPTION",
+          receipt: { status: 1 },
+        })
+      ),
+      false
+    );
+    assert.equal(isMinedRevert(new Error("network down")), false);
   });
 
   test("the error taxonomy is distinguishable by type", () => {
