@@ -2,6 +2,7 @@ import { CronJob } from "cron";
 import { prisma } from "../config/prisma";
 import { DropEventType, DropStatus } from "@prisma/client";
 import { logger } from "../config/logger";
+import { errorDiagnostics } from "../utils/safeLog";
 
 export const expireDropsJob = new CronJob("0 * * * *", async () => {
   const now = new Date();
@@ -24,7 +25,7 @@ export const expireDropsJob = new CronJob("0 * * * *", async () => {
     }
 
     logger.info(
-      { count: expiredDrops.length },
+      { operation: "expireDropsJob", outcome: "starting", count: expiredDrops.length },
       "Found drops that have expired; updating status"
     );
 
@@ -46,7 +47,10 @@ export const expireDropsJob = new CronJob("0 * * * *", async () => {
       ]);
     }
   } catch (error) {
-    logger.error({ error }, "Error executing expire drops job");
+    logger.error(
+      { operation: "expireDropsJob", outcome: "failure", ...errorDiagnostics(error) },
+      "Expire drops job failed"
+    );
   }
 });
 

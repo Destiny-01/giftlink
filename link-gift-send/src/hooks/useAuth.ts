@@ -117,7 +117,7 @@ export function useAuth() {
       // Only sync the primary wallet - backend will handle linking other wallets when they're actually linked
       await api.authenticateUser(accessToken, primaryWallet || undefined);
     } catch (error) {
-      console.error("Failed to sync with backend:", error);
+      console.error("Failed to sync with backend:", error instanceof Error ? error.message : "Unknown error");
       // Don't throw - this is a background sync
     }
   }, [wallets, privyUser]);
@@ -207,7 +207,7 @@ export function useAuth() {
         await login();
       }
     } catch (error) {
-      console.error("Failed to connect wallet:", error);
+      console.error("Failed to connect wallet:", error instanceof Error ? error.message : "Unknown error");
       throw error;
     }
   };
@@ -219,7 +219,7 @@ export function useAuth() {
       // Note: Privy's login() will show all methods, but we can guide users to email
       // For true email-only, we'd need to implement useLoginWithEmail with custom UI
     } catch (error) {
-      console.error("Failed to sign in with email:", error);
+      console.error("Failed to sign in with email:", error instanceof Error ? error.message : "Unknown error");
       throw error;
     }
   };
@@ -230,7 +230,7 @@ export function useAuth() {
       await login();
       // Note: Privy's login() shows all methods, but users can select their preferred OAuth
     } catch (error) {
-      console.error(`Failed to sign in with ${provider}:`, error);
+      console.error(`Failed to sign in with ${provider}:`, error instanceof Error ? error.message : "Unknown error");
       throw error;
     }
   };
@@ -243,7 +243,7 @@ export function useAuth() {
         disconnect();
       } catch (disconnectError) {
         // Ignore disconnect errors - it's okay if there's nothing to disconnect
-        console.log("No wallet to disconnect:", disconnectError);
+        console.log("No wallet to disconnect:", disconnectError instanceof Error ? disconnectError.message : "Unknown disconnectError");
       }
 
       // Logout from Privy
@@ -252,7 +252,7 @@ export function useAuth() {
       // Navigate to home
       navigate("/");
     } catch (error) {
-      console.error("Failed to logout:", error);
+      console.error("Failed to logout:", error instanceof Error ? error.message : "Unknown error");
     }
   };
 
@@ -285,7 +285,7 @@ export function useAuth() {
         await syncWithBackend();
       }
     } catch (error) {
-      console.error("Failed to link account:", error);
+      console.error("Failed to link account:", error instanceof Error ? error.message : "Unknown error");
       throw error;
     }
   };

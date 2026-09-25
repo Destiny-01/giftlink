@@ -1,5 +1,6 @@
 import pinoHttp from "pino-http";
 import { logger } from "../config/logger";
+import { errorTypeName } from "../utils/safeLog";
 
 export const httpLogger = pinoHttp({
   logger,
@@ -18,7 +19,8 @@ export const httpLogger = pinoHttp({
     return `${req.method} ${req.url} - ${res.statusCode}`;
   },
   customErrorMessage: (req, res, err) => {
-    return `${req.method} ${req.url} - ${res.statusCode} - ${err?.message || "Error"}`;
+    // The class name only: a foreign error's message can carry the values it was given.
+    return `${req.method} ${req.url} - ${res.statusCode} - ${errorTypeName(err)}`;
   },
   serializers: {
     req: (req) => ({

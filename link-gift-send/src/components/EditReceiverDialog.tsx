@@ -109,7 +109,10 @@ export function EditReceiverDialog({
         return;
       }
     } else if (recipientType === "discord") {
-      // Discord usernames can be in format: username or username#1234
+      // The modern username form. A legacy `name#1234` is still stored, but the backend can no
+      // longer authorize it: it requires the identity provider to report that exact value, and
+      // providers no longer report discriminators. Steering senders away from it avoids
+      // creating a gift its recipient cannot claim.
       if (normalizedValue.length < 2) {
         toast({
           title: "Invalid Discord username",
@@ -152,7 +155,7 @@ export function EditReceiverDialog({
         });
       }
     } catch (error: unknown) {
-      console.error("Failed to edit receiver:", error);
+      console.error("Failed to edit receiver");
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -187,7 +190,7 @@ export function EditReceiverDialog({
       case "discord":
         return {
           label: "Discord Username",
-          placeholder: "username or username#1234",
+          placeholder: "username",
           icon: <Hash className="h-4 w-4" />,
         };
       case "ens":
