@@ -112,6 +112,83 @@ export function makeAuthUser(
   };
 }
 
+/** A synthetic provider payload, shaped the way the identity provider reports one. */
+export interface ProviderFixture {
+  privyUserId?: string;
+  email?: string | null;
+  wallets?: string[];
+  discord?: { userId?: string; username?: string; discriminator?: string };
+  twitter?: { userId?: string; username?: string };
+}
+
+/**
+ * Builds an authenticated user by running the **real** `extractIdentities` over a synthetic
+ * provider payload.
+ *
+ * `makeAuthUser` hands the policy a hand-written candidate list, which cannot catch a mistake
+ * in how candidates are derived from the provider. This goes through the production
+ * extraction path, so what the policy is given is what the provider would really produce.
+ *
+ * The `require` is deliberately inside the function: this module must finish setting the
+ * environment before any application module is loaded.
+ */
+export function makeAuthUserFromProvider(
+  fixture: ProviderFixture = {}
+): TestAuthUser {
+  const { extractIdentities } = require("../src/services/authService") as typeof import("../src/services/authService");
+
+  const wallets = fixture.wallets ?? [RECIPIENT_WALLET.toLowerCase()];
+  const privyUserId = fixture.privyUserId ?? "did:privy:fixture1";
+
+  const privyUser = {
+    id: privyUserId,
+    linkedAccounts: [
+      ...wallets.map((address) => ({
+        type: "wallet",
+        address,
+        walletClientType: "privy",
+      })),
+      ...(fixture.email === null
+        ? []
+        : [{ type: "email", address: fixture.email ?? RECIPIENT_EMAIL }]),
+      ...(fixture.discord
+        ? [
+            {
+              type: "discord_oauth",
+              userId: fixture.discord.userId,
+              username: fixture.discord.username,
+              discriminator: fixture.discord.discriminator,
+            },
+          ]
+        : []),
+      ...(fixture.twitter
+        ? [
+            {
+              type: "twitter_oauth",
+              userId: fixture.twitter.userId,
+              username: fixture.twitter.username,
+            },
+          ]
+        : []),
+    ],
+  };
+
+  const identities = extractIdentities(privyUser as never);
+
+  return {
+    userId: `row_${privyUserId}`,
+    privyUserId,
+    walletAddresses: identities.walletAddresses,
+    walletKinds: identities.walletKinds,
+    walletAddress: identities.walletAddress,
+    email: identities.email,
+    discordId: identities.discordId,
+    twitterId: identities.twitterId,
+    telegramId: identities.telegramId,
+    socialIdentifiers: identities.socialIdentifiers,
+  };
+}
+
 export interface TestDrop {
   id: string;
   onchainId: bigint | null;

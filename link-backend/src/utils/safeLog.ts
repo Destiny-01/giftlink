@@ -82,17 +82,31 @@ export function errorTypeName(error: unknown): string {
 }
 
 /**
- * A stack with the leading `Name: message` line removed.
+ * V8's frame lines: `at fn (path:line:col)`, `at path:line:col`, with async/new variants.
  *
- * The first line of a V8 stack repeats whatever composed the message, so keeping it would
- * reintroduce exactly the text the rest of this module exists to keep out of logs. The
- * frames below it carry file, function and line positions, which is what debugging needs.
+ * The source position is required, which is what distinguishes a frame from a line of the
+ * message. Without that requirement a multiline message would be indistinguishable from
+ * frames.
+ */
+const STACK_FRAME_PATTERN = /^\s*at\s.+(?::\d+:\d+\)?)$/;
+
+/**
+ * A stack reduced to its frame lines.
+ *
+ * Dropping only the first line is not enough: V8 puts a multiline `Error.message` across the
+ * *leading* lines of `stack`, so `slice(1)` leaves the rest of the message behind, formatted
+ * as though it were a frame. Only lines that parse as frames survive, so no part of the
+ * message can reach a log record.
  */
 export function safeStack(error: unknown): string | undefined {
   if (!(error instanceof Error) || typeof error.stack !== "string") {
     return undefined;
   }
-  const frames = error.stack.split("\n").slice(1);
+
+  const frames = error.stack
+    .split("\n")
+    .filter((line) => STACK_FRAME_PATTERN.test(line));
+
   return frames.length > 0 ? frames.join("\n") : undefined;
 }
 

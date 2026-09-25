@@ -53,11 +53,32 @@ describe("error diagnostics", () => {
     assert.equal(diagnostics.errorType, "ValidationError");
   });
 
-  test("a stack contributes frames, never the message line", () => {
-    const stack = safeStack(new Error(`failed with ${SENSITIVE_FIXTURE}`));
-    assert.ok(stack, "expected frames to survive");
-    assert.equal(stack.includes(SENSITIVE_FIXTURE), false);
-    assert.match(stack, /at /);
+  test("a stack contributes frames, never any part of the message", () => {
+    const single = safeStack(new Error(`failed with ${SENSITIVE_FIXTURE}`));
+    assert.ok(single, "expected frames to survive");
+    assert.equal(single.includes(SENSITIVE_FIXTURE), false);
+
+    // V8 spreads a multiline message across the *leading* lines of `stack`, so dropping only
+    // the first line leaves the rest of the message behind, formatted as though it were a
+    // frame. That is what makes `slice(1)` insufficient.
+    const multiline = safeStack(
+      new Error(`provider failure\n${SENSITIVE_FIXTURE}\nand more of the message`)
+    );
+
+    assert.ok(multiline, "expected frames to survive");
+    assert.equal(
+      multiline.includes(SENSITIVE_FIXTURE),
+      false,
+      "a multiline message leaked through the stack"
+    );
+
+    for (const line of multiline.split("\n")) {
+      assert.match(
+        line,
+        /^\s*at\s/,
+        `a non-frame line survived the stack: ${line}`
+      );
+    }
   });
 
   test("only revert strings from our own contract are recorded", () => {

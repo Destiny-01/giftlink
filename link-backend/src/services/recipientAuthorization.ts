@@ -44,8 +44,6 @@ const NOT_LINKED_MESSAGE =
 const IDENTITY_REQUIRED_MESSAGE =
   "Sign in as the recipient of this gift to claim it";
 
-const DISCRIMINATOR = "#";
-
 /**
  * The comparison form of an identifier.
  *
@@ -57,42 +55,18 @@ function comparableIdentifier(value: string): string {
   return value.trim().toLowerCase().replace(/^@/, "");
 }
 
-function hasDiscriminator(value: string): boolean {
-  return value.includes(DISCRIMINATOR);
-}
-
-function baseUsername(value: string): string {
-  return value.split(DISCRIMINATOR)[0];
-}
-
 /**
  * Whether a stored recipient identifier names the account the provider verified.
  *
- * Handles compare after normalisation. A legacy `name#1234` stored identifier is matched on
- * its base name only when exactly one side carries a discriminator - that is, when the
- * provider does not itself know the discriminator the sender typed. When both sides carry
- * one they must agree, so two accounts sharing a username are not conflated.
+ * Matching is **exact** after normalisation: a handle compares equal only to a provider value
+ * it reproduces. There is deliberately no base-name fallback for a discriminator-qualified
+ * target, because `alice#1234`, `alice#9999` and a bare `alice` are different accounts when
+ * the provider reports a discriminator - an account holding `alice` would otherwise satisfy a
+ * gift addressed to `alice#1234`. A target whose discriminator the provider cannot establish
+ * therefore fails closed rather than being merged onto a base name.
  */
-export function identifiersMatch(
-  stored: string,
-  verified: string,
-  recipientType: RecipientType
-): boolean {
-  const storedComparable = comparableIdentifier(stored);
-  const verifiedComparable = comparableIdentifier(verified);
-
-  if (storedComparable === verifiedComparable) {
-    return true;
-  }
-
-  if (recipientType !== RecipientType.DISCORD) {
-    return false;
-  }
-
-  return (
-    baseUsername(storedComparable) === baseUsername(verifiedComparable) &&
-    hasDiscriminator(storedComparable) !== hasDiscriminator(verifiedComparable)
-  );
+export function identifiersMatch(stored: string, verified: string): boolean {
+  return comparableIdentifier(stored) === comparableIdentifier(verified);
 }
 
 /**
@@ -133,11 +107,7 @@ export function matchVerifiedIdentity(
   const candidates = verifiedCandidatesFor(authUser, drop.recipientType);
   return (
     candidates.find((candidate) =>
-      identifiersMatch(
-        drop.recipientIdentifier,
-        candidate,
-        drop.recipientType
-      )
+      identifiersMatch(drop.recipientIdentifier, candidate)
     ) ?? null
   );
 }
@@ -209,9 +179,7 @@ export function assertClaimAuthorized({
   // Wallet-targeted gifts pay the address the sender chose. The signature proves the caller
   // controls that address, so matching it is the whole policy on the relay path.
   if (recipientType === RecipientType.WALLET) {
-    if (
-      !identifiersMatch(drop.recipientIdentifier, payout, recipientType)
-    ) {
+    if (!identifiersMatch(drop.recipientIdentifier, payout)) {
       throw new ForbiddenError(NOT_RECIPIENT_MESSAGE);
     }
     if (walletEvidence === "privy-linked") {

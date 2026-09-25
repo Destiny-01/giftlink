@@ -10,12 +10,12 @@ import {
   RECIPIENT_WALLET,
   STRANGER_WALLET,
   makeAuthUser,
+  makeAuthUserFromProvider,
   makeDrop,
 } from "./setup";
 
 const { assertClaimAuthorized, identifiersMatch, isAddressedToUser } = require("../src/services/recipientAuthorization") as typeof import("../src/services/recipientAuthorization");
 const { computeRecipientCommit } = require("../src/utils/drop") as typeof import("../src/utils/drop");
-const { RecipientType } = require("@prisma/client") as typeof import("@prisma/client");
 
 /**
  * Fixtures carry a commitment that genuinely belongs to the stored identifier, because the
@@ -134,7 +134,6 @@ describe("recipient authorization policy", () => {
       twitterDrop(`@${RECIPIENT_TWITTER}`),
       twitterDrop(RECIPIENT_TWITTER),
       discordDrop(RECIPIENT_DISCORD.toLowerCase()),
-      discordDrop(`${RECIPIENT_DISCORD}#1234`.toLowerCase()),
       discordDrop(RECIPIENT_DISCORD_USER_ID),
     ]) {
       assert.doesNotThrow(
@@ -150,6 +149,88 @@ describe("recipient authorization policy", () => {
     }
   });
 
+  test("provider-derived candidates authorize a discriminator-qualified gift exactly", () => {
+    // Candidates built by the real extraction path, not hand-written: the provider reports a
+    // numeric id, a bare handle *and* a discriminator-qualified handle for one account.
+    const account = makeAuthUserFromProvider({
+      discord: {
+        userId: "998877665544332211",
+        username: "sameuser",
+        discriminator: "9999",
+      },
+    });
+
+    const attempted = (identifier: string) => () =>
+      assertClaimAuthorized({
+        drop: discordDrop(identifier),
+        authUser: account,
+        payoutAddress: RECIPIENT_WALLET,
+        walletEvidence: "privy-linked",
+      });
+
+    // The evidence the provider actually reported is accepted.
+    assert.doesNotThrow(attempted("sameuser#9999"), "the exact handle was refused");
+    assert.doesNotThrow(attempted("sameuser"), "the bare handle was refused");
+    assert.doesNotThrow(
+      attempted("998877665544332211"),
+      "the provider's own id was refused"
+    );
+
+    // The account that shares the base name but not the discriminator is a different account
+    // and must be refused. A bare-username fallback used to authorize it.
+    assert.throws(
+      attempted("sameuser#1234"),
+      /addressed to a different recipient/,
+      "a discriminator-qualified gift authorized the wrong account"
+    );
+  });
+
+  test("a discriminator the provider cannot establish fails closed", () => {
+    // The sender addressed a legacy `username#1234`, but this account reports no discriminator
+    // at all, so there is no evidence to match on. It is refused rather than merged onto the
+    // base name.
+    const account = makeAuthUserFromProvider({
+      discord: { userId: "998877665544332211", username: "sameuser" },
+    });
+
+    assert.throws(
+      () =>
+        assertClaimAuthorized({
+          drop: discordDrop("sameuser#1234"),
+          authUser: account,
+          payoutAddress: RECIPIENT_WALLET,
+          walletEvidence: "privy-linked",
+        }),
+      /addressed to a different recipient/
+    );
+
+    // The bare form, which is what the provider does report, still works.
+    assert.doesNotThrow(() =>
+      assertClaimAuthorized({
+        drop: discordDrop("sameuser"),
+        authUser: account,
+        payoutAddress: RECIPIENT_WALLET,
+        walletEvidence: "privy-linked",
+      })
+    );
+  });
+
+  test("matching is exact and never merges by base name", () => {
+    assert.equal(identifiersMatch("@Alice", "alice"), true);
+    assert.equal(identifiersMatch("alice#1234", "alice#1234"), true);
+    assert.equal(
+      identifiersMatch("alice#1234", "alice#9999"),
+      false,
+      "two discriminated accounts were treated as one"
+    );
+    assert.equal(
+      identifiersMatch("alice#1234", "alice"),
+      false,
+      "a bare handle satisfied a discriminated target"
+    );
+    assert.equal(identifiersMatch("alice", "bob"), false);
+  });
+
   test("an unrelated handle is still refused", () => {
     assert.throws(
       () =>
@@ -161,28 +242,6 @@ describe("recipient authorization policy", () => {
         }),
       /addressed to a different recipient/
     );
-  });
-
-  test("a discriminator never conflates two accounts sharing a username", () => {
-    assert.equal(
-      identifiersMatch("alice#1234", "alice#1234", RecipientType.DISCORD),
-      true
-    );
-    assert.equal(
-      identifiersMatch("alice#1234", "alice#9999", RecipientType.DISCORD),
-      false,
-      "two discriminated accounts were treated as one"
-    );
-    // When only one side carries a discriminator, the base name is all there is to match on.
-    assert.equal(
-      identifiersMatch("alice#1234", "alice", RecipientType.DISCORD),
-      true
-    );
-    assert.equal(
-      identifiersMatch("@Alice", "alice", RecipientType.TWITTER),
-      true
-    );
-    assert.equal(identifiersMatch("alice", "bob", RecipientType.TWITTER), false);
   });
 
   test("an unrelated authenticated identity cannot claim a targeted gift", () => {

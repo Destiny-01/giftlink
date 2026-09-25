@@ -1028,7 +1028,6 @@ describe("logging hygiene", () => {
     // A failure whose message carries a credential-shaped value, exactly as a provider,
     // Prisma or the RPC client can produce. It must not be echoed anywhere.
     dropLookupFailure = new Error(`connect failed: ${SENSITIVE_FIXTURE}`);
-
     const response = await post(
       `/api/drops/${TEST_DROP_ID}/relay-claim`,
       RECIPIENT_TOKEN,
@@ -1058,6 +1057,33 @@ describe("logging hygiene", () => {
     );
 
     assert.ok(!logRecords.join("\n").includes(SENSITIVE_FIXTURE));
+  });
+
+  test("a multiline failure message does not leak through the logged stack", async () => {
+    reset();
+    logRecords.length = 0;
+    // Stacks are logged outside production, and V8 repeats a multiline message across the
+    // leading lines of `stack` - so the leak is only visible with a multiline message.
+    dropLookupFailure = new Error(
+      `provider failure\n${SENSITIVE_FIXTURE}\nmore of the message`
+    );
+
+    await post(
+      `/api/drops/${TEST_DROP_ID}/relay-claim`,
+      RECIPIENT_TOKEN,
+      await relayBody(RECIPIENT_WALLET, RECIPIENT_WALLET_KEY)
+    );
+
+    const captured = logRecords.join("\n");
+    assert.equal(
+      captured.includes(SENSITIVE_FIXTURE),
+      false,
+      "a multiline message leaked into the captured logs"
+    );
+    assert.ok(
+      captured.includes("at "),
+      "frames should still be logged, or diagnosis loses its value"
+    );
   });
 
   test("validation failures do not echo the rejected value", async () => {
