@@ -22,7 +22,4 @@ broadcast, e.g. `arc-testnet.json`:
 
 ## Current status
 
-No record exists yet. The Arc testnet deployment is **blocked**: this environment has
-no `ARC_TESTNET_RPC_URL` and no funded `DEPLOYER_PRIVATE_KEY`. The deploy script's
-fail-closed preflight is the reason nothing was broadcast — see
-`link-contracts/README.md` ("Testnet deployment status").
+Deployment and source verification are complete on Arc testnet. See [arc-testnet.json](arc-testnet.json), [runtime proof](arc-testnet-runtime.md), and [machine-readable evidence](arc-testnet-runtime.json). The runtime proof includes live funding, sponsored settlement, real expiry and issuer recovery. Approval authorities were simulated test actors; the independent human issuer-confirmation workflow remains outstanding.

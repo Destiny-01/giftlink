@@ -1,0 +1,87 @@
+{
+  "commit": "fcfd71c3946d00f7a4a798def4d03a8eefff248a",
+  "chainId": 5042002,
+  "transactions": [
+    {
+      "label": "deployment",
+      "hash": "0xba4d60f953ea8d099dd2903ff29f86d2a531fbee81bf712fdc801db6d5183338",
+      "block": 64110120,
+      "gasUsed": "1796197",
+      "fee": "44904925000000000"
+    },
+    {
+      "label": "USDC allowance",
+      "hash": "0xdafc3c734c71d3469f02895fa25ddd041c41889747c00ca73bb52ea5c152fbac",
+      "block": 64110127,
+      "gasUsed": "55438",
+      "fee": "1385950000000000"
+    },
+    {
+      "label": "fund campaign",
+      "hash": "0x3d7272fc643c6e9a4ecde9b2c4a95e38939ada0f116501f1e0c8f3e509c4d349",
+      "block": 64110137,
+      "gasUsed": "224724",
+      "fee": "5618100000000000"
+    },
+    {
+      "label": "sponsored settlement",
+      "hash": "0xfa58f31ec8845179793e9bef29d122893d2ddd66b412f7cb3375f7b1bb90a8ea",
+      "block": 64110218,
+      "gasUsed": "124107",
+      "fee": "3102675000000000"
+    },
+    {
+      "label": "expiry recovery",
+      "hash": "0xdbbc5289a4fa72897afcc06a05564835028ffa50a0ec60304c70cb2e27292b2c",
+      "block": 64110490,
+      "gasUsed": "82273",
+      "fee": "2056825000000000"
+    }
+  ],
+  "checks": [
+    "live RPC constructor simulation and deployment cost bound",
+    "deployed runtime getters",
+    "reject issuer also approver [IssuerIsAnApprover]",
+    "reject duplicate entitlements [InvalidEntitlementSet]",
+    "reject underfunding [Error]",
+    "all three entitlements fully funded",
+    "reject before opening [CampaignNotOpen]",
+    "issuer alone [InvalidResolverApproval]",
+    "resolver alone [InvalidIssuerApproval]",
+    "wallet substitution [ApprovalMismatch]",
+    "fabricated root membership [EntitlementNotListed]",
+    "expired approvals [ApprovalExpired]",
+    "cross-chain consent replay [InvalidClaimantConsent]",
+    "cross-contract consent replay [InvalidClaimantConsent]",
+    "claimant receives exact allocation without paying gas",
+    "double settlement replay [EntitlementAlreadyConsumed]",
+    "early reclaim [NotExpired]",
+    "settlement after expiry [CampaignExpired]",
+    "non-issuer recovery [NotIssuer]",
+    "unused balance recovered without gate signatures",
+    "duplicate reclaim [CampaignReclaimedAlready]",
+    "canonical event replay and conservation: 0.30 funded = 0.10 settled + 0.20 reclaimed"
+  ],
+  "simulatedGateAuthorities": true,
+  "contract": "0x9D390dCa06118302C8194CC214Ed9BC7f5969810",
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "actors": {
+    "issuer": "0xe3C71da511A74b18ac41d4E19308aeEE980b98E1",
+    "issuerApprover": "0x60b9928868D89e1d16C24b4d8b0251f3E70FbC50",
+    "resolver": "0xa888e827D0395ab404BB424651E26019293c767d",
+    "claimant": "0x7B1fE526f09FE1aD9FD0C228AA9FEDd271e2c201",
+    "sponsor": "0xe3C71da511A74b18ac41d4E19308aeEE980b98E1"
+  },
+  "campaignId": "1",
+  "expiry": 1790431155,
+  "opening": 1790431015,
+  "accounting": {
+    "funded": "0.30",
+    "settled": "0.10",
+    "reclaimed": "0.20",
+    "remaining": "0",
+    "asset": "test USDC"
+  },
+  "completed": true,
+  "completedAt": "2026-09-26T13:59:22.507Z"
+}
