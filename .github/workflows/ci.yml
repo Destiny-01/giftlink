@@ -41,3 +41,25 @@ jobs:
       - run: npx tsc --noEmit -p tsconfig.app.json
       - run: npm run build
       - run: npm run lint
+
+  contracts:
+    name: Contracts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: link-contracts
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: link-contracts/package-lock.json
+      - run: npm ci
+      - run: npx hardhat compile
+      - run: npx hardhat test
+      - run: npx tsc --noEmit
+      - run: npx hardhat run scripts/export-abi.ts
+      # The committed ABI must match the compiled artefact.
+      - run: git diff --exit-code -- abi/NomineClaimCore.json
+

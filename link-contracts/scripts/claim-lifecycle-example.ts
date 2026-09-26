@@ -39,7 +39,7 @@ async function increaseTime(seconds: bigint) {
 }
 
 async function main() {
-  const [deployer, issuer, relayer, recoveryDestination] = await hre.ethers.getSigners();
+  const [deployer, issuer, relayer] = await hre.ethers.getSigners();
 
   // Independent keys generated for this run. In production the issuer approver key
   // lives in the issuer's own environment and the Resolver key in Nomine's; neither
@@ -49,11 +49,10 @@ async function main() {
   const claimant = ethers.Wallet.createRandom();
 
   console.log("Actors (addresses only; no private key is printed or stored)");
-  console.log(`  issuer (funder)     ${issuer.address}`);
+  console.log(`  issuer (funder + recovery destination) ${issuer.address}`);
   console.log(`  issuer approver     ${issuerApprover.address}`);
   console.log(`  resolver            ${resolver.address}`);
   console.log(`  claimant wallet     ${claimant.address}`);
-  console.log(`  recovery destination ${recoveryDestination.address}`);
   console.log(`  relayer (sponsor)   ${relayer.address}\n`);
 
   const usdc: any = await (await hre.ethers.getContractFactory("MockUSDC")).deploy();
@@ -67,30 +66,31 @@ async function main() {
 
   // --- 1. The issuer lists entitlements and commits to them at funding ---------
   const campaignSalt = ethers.hexlify(ethers.randomBytes(16));
-  const entitlements = Array.from({ length: ENTITLEMENT_COUNT }, (_, index) =>
+  const identifiers = Array.from({ length: ENTITLEMENT_COUNT }, (_, index) =>
     ethers.keccak256(ethers.toUtf8Bytes(`nomine:entitlement:${campaignSalt}:${index}`)),
   );
-  const tree = buildMerkleTree(entitlements);
+  const tree = buildMerkleTree(identifiers);
   console.log("1. Funding an immutable, fully backed campaign");
-  console.log(`   listed entitlements ${ENTITLEMENT_COUNT}, allocation ${ethers.formatUnits(ALLOCATION, 6)} USDC each`);
+  console.log(`   listed entitlements ${tree.identifiers.length}, allocation ${ethers.formatUnits(ALLOCATION, 6)} USDC each`);
   console.log(`   membership commitment ${tree.root}`);
-  console.log(`   example entitlement id (opaque) ${entitlements[0]}\n`);
+  console.log(`   example entitlement id (opaque) ${tree.identifiers[0]}\n`);
 
   const now = BigInt((await hre.ethers.provider.getBlock("latest"))!.timestamp);
   const openingTime = now;
   const expiryTime = now + 30n * DAY;
 
-  await usdc.mint(issuer.address, BigInt(ENTITLEMENT_COUNT) * ALLOCATION);
-  await usdc.connect(issuer).approve(coreAddress, BigInt(ENTITLEMENT_COUNT) * ALLOCATION);
+  const budget = BigInt(tree.identifiers.length) * ALLOCATION;
+  await usdc.mint(issuer.address, budget);
+  await usdc.connect(issuer).approve(coreAddress, budget);
+  // The count and the commitment are derived from the supplied set; the caller cannot
+  // fund fewer entitlements than it lists.
   await core.connect(issuer).createCampaign({
     issuerApprover: issuerApprover.address,
     resolver: resolver.address,
-    recoveryDestination: recoveryDestination.address,
     allocation: ALLOCATION,
-    entitlementCount: ENTITLEMENT_COUNT,
     openingTime,
     expiryTime,
-    entitlementRoot: tree.root,
+    entitlementIds: tree.identifiers,
   });
   const campaignId = await core.campaignCount();
   const escrow = await usdc.balanceOf(coreAddress);
@@ -100,7 +100,7 @@ async function main() {
   // The issuer independently verifies that the entitlement belongs to this claimant's
   // wallet through a known channel: that check happens outside Nomine and is not
   // something the contract can perform.
-  const entitlementId = entitlements[0];
+  const entitlementId = tree.identifiers[0];
   const request = {
     campaignId,
     entitlementId,
@@ -201,7 +201,7 @@ async function main() {
   // --- 7. Expiry recovery without either Gate signer --------------------------
   await increaseTime(expiryTime - BigInt((await hre.ethers.provider.getBlock("latest"))!.timestamp) + 1n);
   console.log("7. After expiry");
-  const lateRequest = { ...request, entitlementId: entitlements[1], deadline: expiryTime + DAY };
+  const lateRequest = { ...request, entitlementId: tree.identifiers[1], deadline: expiryTime + DAY };
   const lateConsent = consentDigest(signerDomain, lateRequest);
   const lateApproval = { ...lateRequest, consentDigest: lateConsent };
   const lateClaimantSignature = await claimant.signTypedData(signerDomain, CLAIM_REQUEST_TYPES, lateRequest);
@@ -216,19 +216,20 @@ async function main() {
         lateApproval,
         lateIssuerSignature,
         lateResolverSignature,
-        tree.proof(entitlements[1]),
+        tree.proof(tree.identifiers[1]),
       ),
   );
 
-  const recoveryBefore = await usdc.balanceOf(recoveryDestination.address);
-  // No claimant consent and no Gate signature is involved in reclaim.
+  const recoveryBefore = await usdc.balanceOf(issuer.address);
+  // No claimant consent and no Gate signature is involved in reclaim, and the
+  // destination is the issuer fixed at funding.
   await core.connect(issuer).reclaim(campaignId);
-  const recovered = (await usdc.balanceOf(recoveryDestination.address)) - recoveryBefore;
-  assert.equal(recovered, (BigInt(ENTITLEMENT_COUNT) - 1n) * ALLOCATION, "reclaim did not return the unused balance");
+  const recovered = (await usdc.balanceOf(issuer.address)) - recoveryBefore;
+  assert.equal(recovered, (BigInt(tree.identifiers.length) - 1n) * ALLOCATION, "reclaim did not return the unused balance");
   assert.equal(await usdc.balanceOf(coreAddress), 0n, "escrow not emptied");
   assert.equal(await usdc.balanceOf(claimant.address), ALLOCATION, "settled funds were disturbed");
 
-  console.log(`   unused balance returned to the fixed recovery destination: ${ethers.formatUnits(recovered, 6)} USDC`);
+  console.log(`   unused balance returned to the issuer: ${ethers.formatUnits(recovered, 6)} USDC`);
   console.log(`   settled allocation untouched: ${ethers.formatUnits(await usdc.balanceOf(claimant.address), 6)} USDC`);
   console.log(`   escrow after reclaim: ${ethers.formatUnits(await usdc.balanceOf(coreAddress), 6)} USDC`);
   console.log(`   reclaim required neither Gate signer nor claimant consent\n`);

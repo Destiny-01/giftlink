@@ -63,7 +63,7 @@ The current release is an Arc-native proof of the core issuer-to-claimant loop:
 - One clearly declared, Resolver-backed eligibility source, fixed at funding.
 - A single-use authorization for each eligible claimant.
 - Dual attestation: the claimant signs the payout, then an independently held issuer approval and a Nomine Resolver approval attest that exact signed request.
-- Immutable funded rules: allocation, entitlement commitment, approving authorities, opening time, expiry, and recovery destination cannot change after funding.
+- Immutable funded rules: allocation, entitlement commitment, approving authorities, opening time, expiry, and the issuer's fixed recovery cannot change after funding.
 - Direct USDC settlement only.
 - Opening time, expiry, and deterministic issuer reclaim that requires neither Gate attestation nor claimant consent.
 - An issuer view of funded, settled, remaining, and reclaimed value.
@@ -76,7 +76,7 @@ The current release does not include swaps, liquidity positions, arbitrary settl
 
 ### Create and fund a campaign
 
-1. An issuer defines the fixed amount per claimant, total budget or claim cap, eligibility source, opening time, expiry, and recovery destination.
+1. An issuer defines the fixed amount per claimant and the funded entitlement set — its size is the budget — plus the eligibility source, opening time, and expiry. Recovery returns to that issuer.
 2. The product presents the complete configuration for review.
 3. The issuer funds the campaign with USDC on Arc.
 4. The campaign becomes discoverable through a shareable Claim experience, with its funding and rules visible.

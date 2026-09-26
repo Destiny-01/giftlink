@@ -19,6 +19,10 @@ const config: HardhatUserConfig = {
       // membership proof; the IR pipeline keeps that reachable without splitting
       // verification across helpers whose storage reads are harder to follow.
       viaIR: true,
+      // Cancun is not a free choice: OpenZeppelin 5 compiles `mcopy` (Cancun-only). The
+      // target runtime must therefore expose Cancun opcodes — confirm against Arc's EVM
+      // reference before the first broadcast, and downgrade OpenZeppelin to 4.x if it does
+      // not.
       evmVersion: "cancun",
     },
   },

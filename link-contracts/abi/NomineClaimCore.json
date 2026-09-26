@@ -209,18 +209,12 @@
   },
   {
     "inputs": [],
-    "name": "InvalidIssuerApproval",
+    "name": "InvalidEntitlementSet",
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "destination",
-        "type": "address"
-      }
-    ],
-    "name": "InvalidRecoveryDestination",
+    "inputs": [],
+    "name": "InvalidIssuerApproval",
     "type": "error"
   },
   {
@@ -247,6 +241,17 @@
       }
     ],
     "name": "InvalidWindow",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "issuer",
+        "type": "address"
+      }
+    ],
+    "name": "IssuerIsAnApprover",
     "type": "error"
   },
   {
@@ -315,11 +320,6 @@
   },
   {
     "inputs": [],
-    "name": "UsdcTransferFailed",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "ZeroAddress",
     "type": "error"
   },
@@ -353,12 +353,6 @@
         "indexed": false,
         "internalType": "address",
         "name": "resolver",
-        "type": "address"
-      },
-      {
-        "indexed": false,
-        "internalType": "address",
-        "name": "recoveryDestination",
         "type": "address"
       },
       {
@@ -413,7 +407,7 @@
       {
         "indexed": true,
         "internalType": "address",
-        "name": "recoveryDestination",
+        "name": "issuer",
         "type": "address"
       },
       {
@@ -555,19 +549,9 @@
             "type": "address"
           },
           {
-            "internalType": "address",
-            "name": "recoveryDestination",
-            "type": "address"
-          },
-          {
             "internalType": "uint128",
             "name": "allocation",
             "type": "uint128"
-          },
-          {
-            "internalType": "uint32",
-            "name": "entitlementCount",
-            "type": "uint32"
           },
           {
             "internalType": "uint64",
@@ -580,9 +564,9 @@
             "type": "uint64"
           },
           {
-            "internalType": "bytes32",
-            "name": "entitlementRoot",
-            "type": "bytes32"
+            "internalType": "bytes32[]",
+            "name": "entitlementIds",
+            "type": "bytes32[]"
           }
         ],
         "internalType": "struct NomineClaimCore.CampaignConfig",
@@ -669,11 +653,6 @@
           {
             "internalType": "address",
             "name": "resolver",
-            "type": "address"
-          },
-          {
-            "internalType": "address",
-            "name": "recoveryDestination",
             "type": "address"
           },
           {

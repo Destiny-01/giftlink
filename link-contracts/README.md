@@ -24,13 +24,16 @@ absence of those entry points is the guarantee, not a policy.
 
 ## Lifecycle
 
-`createCampaign` fixes **issuer**, **issuer approver**, **resolver**, **recovery
-destination**, **allocation**, **entitlement count**, **opening time**, **expiry
-time** and a **membership commitment** (a Merkle root over the actual entitlement
-identifiers). The full budget — `allocation × entitlementCount` — is transferred in
-the same call, so an unfunded campaign never exists and the stored `entitlementCount`
-is always fully backed. There is no separate cap the eligible list may exceed, and no
-oversubscription.
+`createCampaign` fixes the **issuer** (funder and recovery destination), the two
+approving authorities, the **allocation**, the **opening and expiry times**, and the
+**entitlement set**. The set is supplied as the actual identifiers in strictly ascending
+order; the contract derives both the **membership commitment** (a Merkle root over the
+hashed identifiers) and the **entitlement count** from it, and transfers the full budget
+— `allocation × count` — in the same call. An unfunded campaign never exists, every
+listed entitlement is backed by its own allocation, and a caller-supplied count that could
+disagree with the committed set is impossible. Neither approving authority may be the
+issuer, so losing an approving key can never remove the only address able to trigger
+expiry recovery.
 
 Settlement is permitted only when all of these hold. The campaign, entitlement, wallet, amount, chain,
 contract and deadline are bound into the claimant's signature and both attestations; the time window,
@@ -46,8 +49,8 @@ capacity and consumption state are enforced from campaign state and cannot be si
   approver and Resolver.
 
 Reclaim is issuer-only, expiry-only, and independent of both Gate attestations and
-claimant consent. It returns exactly the unsettled balance to the recovery
-destination fixed at funding.
+claimant consent. It returns exactly the unsettled balance to the issuer, which is the
+recovery destination fixed at funding.
 
 Derived, so no stored value can disagree with the chain:
 
@@ -58,11 +61,14 @@ remaining     = (entitlementCount − settlementCount) × allocation
 reclaimable   = budget − settled
 ```
 
-Membership is a Merkle proof against the committed root. The contract sees only the root, so it cannot
-check that the committed leaf count equals `entitlementCount` or that the leaves are distinct. The
-commitment must therefore list exactly one identifier per funded entitlement. A commitment listing fewer
-distinct identifiers than the funded count cannot over-pay — each identifier settles once — but the
-surplus stays in escrow until expiry recovery.
+Membership is a Merkle proof against the committed root, and the proof is for the **hashed leaf** of an
+identifier — never the identifier itself. Because leaves hash 32 bytes while internal nodes hash 64, the
+root and internal nodes are not valid identifiers and cannot be verified even with a shortened proof. The
+funded capacity is likewise not asserted by the caller: funding derives it from the supplied set, so a
+campaign can never list more entitlements than it has funded.
+
+Because the commitment is derived on-chain, funding gas grows with the size of the entitlement set. The
+V1 model is sized for community pilot campaigns — hundreds of entitlements, not hundreds of thousands.
 
 ## How the approvals are tied to the signed request
 
@@ -84,12 +90,13 @@ signed request digest").
 What the contract enforces:
 
 - custody: no role can move escrow before expiry, and reclaim moves only the
-  unsettled balance to the fixed destination;
-- single use: each entitlement identifier settles at most once;
+  unsettled balance to the issuer fixed at funding;
+- single use: each entitlement identifier settles at most once, and only if it is a leaf
+  of the commitment;
 - payout integrity: the amount is fixed and the destination wallet is the one the
   claimant signed for, so no relayer or submitter can redirect it;
-- distinct authorities: a configuration naming the same address for both approving
-  authorities is refused at funding.
+- separated roles: a configuration naming the same address for both approving
+  authorities, or reusing the issuer as an approving authority, is refused at funding.
 
 What the contract **cannot** do, and must never be described as doing:
 
@@ -129,9 +136,10 @@ preserves this trust boundary.
 
 Losing either approving key stops settlement until expiry — it cannot be replaced,
 because funded campaigns are immutable. It does **not** strand funds: `reclaim`
-depends on neither Gate signer nor claimant consent, so the issuer can always recover
-the unused balance to the fixed destination after expiry. This is asserted by the
-"works without either approving authority participating" test.
+depends on neither Gate signer nor claimant consent, and funding forbids the issuer from
+being an approving authority, so the issuer can always recover the unused balance after
+expiry. This is asserted by the "works without either approving authority participating"
+test and by the funding-time rejection of an issuer that is also an approver.
 
 ### Remaining collusion risk
 
@@ -145,14 +153,14 @@ survives collusion; per-identity uniqueness does not.
 
 `config/arc.ts` holds the only accepted chain parameters. The RPC URL is never
 defaulted — an operator supplies it through `ARC_TESTNET_RPC_URL` /
-`ARC_MAINNET_RPC_URL`. Deployment runs a preflight that refuses to continue unless
-the live chain ID matches the configured chain ID and the configured USDC address has
-code and reports the expected decimals.
+`ARC_MAINNET_RPC_URL`. Deployment runs a preflight that refuses to continue unless the
+endpoint's own `eth_chainId` matches the configured chain ID and the configured USDC
+address has code and reports the expected symbol and decimals.
 
 ```bash
 npm install
 npm run compile
-npm test            # 37 tests
+npm test            # 41 tests
 npm run typecheck
 npm run export-abi  # regenerates abi/NomineClaimCore.json
 
@@ -166,6 +174,10 @@ ARC_NETWORK=testnet ARC_TESTNET_RPC_URL=... DEPLOYER_PRIVATE_KEY=... \
 
 A mainnet broadcast additionally requires `ARC_MAINNET_APPROVED=yes`; that is the
 explicit approval gate, not an incidental default.
+
+Compilation targets the **Cancun** EVM version because OpenZeppelin 5 compiles Cancun-only
+opcodes. The target runtime must expose them; confirm this against Arc's EVM reference before
+the first broadcast, and downgrade OpenZeppelin to 4.x if it does not.
 
 ### Testnet deployment status — blocked
 

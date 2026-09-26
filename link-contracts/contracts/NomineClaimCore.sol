@@ -17,11 +17,18 @@ import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProo
  * same request. There is no owner, no upgrade path, no authority replacement and
  * no administrative sweep: the absence of those functions is the guarantee.
  *
+ * The funded capacity is bound to the committed set rather than asserted: funding
+ * takes the actual entitlement identifiers, requires them strictly ascending (so
+ * they are unique and non-zero), derives the membership root from them, and funds
+ * `allocation × count`. Settlement proves membership of a *leaf*, never of the raw
+ * identifier, so neither the root nor an internal node can be presented as a listed
+ * entitlement.
+ *
  * Trust boundary (see docs/DECISIONS.md D-006 / D-019): the contract verifies
  * wallet consent and both approving authorities. It cannot prove that an
  * entitlement identifier corresponds to an off-chain identity, nor that the two
  * authorities are controlled by different organisations; it can only refuse a
- * configuration that names the same address for both. Wallet consent proves
+ * configuration that reuses an address across those roles. Wallet consent proves
  * control of the wallet, not ownership of the identity behind the entitlement.
  * Collusion between both Gate authorities remains an explicit Gate-trust risk.
  */
@@ -42,30 +49,28 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
     );
 
     struct Campaign {
-        address issuer; // Funder; the only address that may reclaim.
+        address issuer; // Funder; the only address that may reclaim, and the recovery destination.
         address issuerApprover; // Independent issuer approval key; held outside Nomine.
-        address resolver; // Nomine Resolver approval key. Must differ from issuerApprover.
-        address recoveryDestination; // Fixed at funding; receives unused funds after expiry.
+        address resolver; // Nomine Resolver approval key. Must differ from issuerApprover and from issuer.
         uint128 allocation; // Exact USDC transferred by every settlement.
-        uint32 entitlementCount; // Number of listed entitlements; all fully funded.
+        uint32 entitlementCount; // Length of the committed set; all fully funded.
         uint32 settlementCount; // Entitlements consumed so far.
         uint64 openingTime; // Earliest settlement time.
         uint64 expiryTime; // Settlement is refused at and after this time.
-        bytes32 entitlementRoot; // Commitment over the actual entitlement identifiers.
+        bytes32 entitlementRoot; // Commitment to the exact identifiers supplied at funding.
         bool reclaimed; // Set once the unused balance has been returned.
     }
 
-    /// @dev Everything fixed at funding. Passed as one struct so the funding call
-    /// stays readable and the immutable configuration is a single object.
+    /// @dev Everything fixed at funding. `entitlementIds` is the actual listed set,
+    /// supplied in strictly ascending order; the count and the commitment are derived
+    /// from it, so a campaign can never fund fewer entitlements than it lists.
     struct CampaignConfig {
         address issuerApprover; // Independent issuer approval key; held outside Nomine.
-        address resolver; // Nomine Resolver approval key. Must differ from issuerApprover.
-        address recoveryDestination; // Receives unused funds after expiry.
+        address resolver; // Nomine Resolver approval key. Must differ from issuerApprover and from issuer.
         uint128 allocation; // Exact USDC transferred by every settlement.
-        uint32 entitlementCount; // Number of listed entitlements; all fully funded.
         uint64 openingTime; // Earliest settlement time.
         uint64 expiryTime; // Settlement is refused at and after this time.
-        bytes32 entitlementRoot; // Commitment over the actual entitlement identifiers.
+        bytes32[] entitlementIds; // Strictly ascending, unique, non-zero.
     }
 
     /// @dev Exactly the fields the claimant signs. `wallet` is the payout address.
@@ -100,7 +105,6 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
         address indexed issuer,
         address indexed issuerApprover,
         address resolver,
-        address recoveryDestination,
         uint128 allocation,
         uint32 entitlementCount,
         uint256 fundedAmount,
@@ -121,11 +125,9 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
         address submitter
     );
 
-    event CampaignReclaimed(
-        uint256 indexed campaignId,
-        address indexed recoveryDestination,
-        uint256 amount
-    );
+    /// @dev Recovery always returns to the campaign's issuer, so the destination is
+    /// indexed as the issuer.
+    event CampaignReclaimed(uint256 indexed campaignId, address indexed issuer, uint256 amount);
 
     error CampaignNotFound(uint256 campaignId);
     error CampaignReclaimedAlready(uint256 campaignId);
@@ -134,8 +136,9 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
     error EntitlementCountReached(uint256 campaignId, uint32 entitlementCount);
     error ZeroAddress();
     error ZeroValue();
-    error InvalidRecoveryDestination(address destination);
+    error InvalidEntitlementSet();
     error AuthoritiesNotDistinct();
+    error IssuerIsAnApprover(address issuer);
     error InvalidWindow(uint64 openingTime, uint64 expiryTime);
     error EntitlementNotListed(uint256 campaignId);
     error EntitlementAlreadyConsumed(uint256 campaignId, bytes32 entitlementId);
@@ -148,7 +151,6 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
     error FundingAmountMismatch(uint256 expected, uint256 received);
     error NotIssuer(address caller, address issuer);
     error NotExpired(uint256 campaignId, uint64 expiryTime, uint256 nowTimestamp);
-    error UsdcTransferFailed();
 
     constructor(address usdc_) EIP712("NomineClaimCore", "1") {
         if (usdc_ == address(0)) revert ZeroAddress();
@@ -162,30 +164,32 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
     /**
      * @notice Create and fully fund one immutable campaign.
      *
-     * @dev The caller is the issuer. The full budget — `allocation * entitlementCount` —
-     * is transferred atomically, so an unfunded campaign never exists. Every listed
-     * entitlement is backed by its own allocation; there is no cap that the eligible
-     * list may exceed. `issuerApprover` and `resolver` must be different addresses.
+     * @dev The caller is the issuer and the recovery destination. `entitlementIds` is
+     * the actual listed set, strictly ascending; its length is the funded capacity and
+     * the membership commitment is derived from it, so every listed entitlement is
+     * backed by its own allocation and the funded budget — `allocation × count` — is
+     * transferred atomically. That makes an unfunded campaign impossible and removes
+     * any caller-supplied count that could disagree with the committed set.
+     *
+     * Neither approving authority may be the issuer, so losing an approving key can
+     * never remove the only address able to trigger expiry recovery.
      */
     function createCampaign(CampaignConfig calldata config) external nonReentrant returns (uint256 campaignId) {
-        if (
-            config.issuerApprover == address(0) ||
-            config.resolver == address(0) ||
-            config.recoveryDestination == address(0)
-        ) {
-            revert ZeroAddress();
-        }
+        if (config.issuerApprover == address(0) || config.resolver == address(0)) revert ZeroAddress();
         if (config.issuerApprover == config.resolver) revert AuthoritiesNotDistinct();
-        if (config.recoveryDestination == address(this) || config.recoveryDestination == address(USDC)) {
-            revert InvalidRecoveryDestination(config.recoveryDestination);
+        if (config.issuerApprover == msg.sender || config.resolver == msg.sender) {
+            revert IssuerIsAnApprover(msg.sender);
         }
-        if (config.allocation == 0 || config.entitlementCount == 0) revert ZeroValue();
-        if (config.entitlementRoot == bytes32(0)) revert ZeroValue();
+        if (config.allocation == 0) revert ZeroValue();
         if (config.expiryTime <= config.openingTime || config.expiryTime <= block.timestamp) {
             revert InvalidWindow(config.openingTime, config.expiryTime);
         }
 
-        uint256 budget = uint256(config.allocation) * uint256(config.entitlementCount);
+        uint256 count = config.entitlementIds.length;
+        if (count == 0 || count > type(uint32).max) revert InvalidEntitlementSet();
+        bytes32 entitlementRoot = _commitmentFrom(config.entitlementIds);
+
+        uint256 budget = uint256(config.allocation) * count;
 
         uint256 balanceBefore = USDC.balanceOf(address(this));
         USDC.safeTransferFrom(msg.sender, address(this), budget);
@@ -197,25 +201,23 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
         campaign.issuer = msg.sender;
         campaign.issuerApprover = config.issuerApprover;
         campaign.resolver = config.resolver;
-        campaign.recoveryDestination = config.recoveryDestination;
         campaign.allocation = config.allocation;
-        campaign.entitlementCount = config.entitlementCount;
+        campaign.entitlementCount = uint32(count);
         campaign.openingTime = config.openingTime;
         campaign.expiryTime = config.expiryTime;
-        campaign.entitlementRoot = config.entitlementRoot;
+        campaign.entitlementRoot = entitlementRoot;
 
         emit CampaignFunded(
             campaignId,
             msg.sender,
             config.issuerApprover,
             config.resolver,
-            config.recoveryDestination,
             config.allocation,
-            config.entitlementCount,
+            uint32(count),
             budget,
             config.openingTime,
             config.expiryTime,
-            config.entitlementRoot
+            entitlementRoot
         );
     }
 
@@ -237,7 +239,7 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
      * @param approval Both authorities' attestation payload (identical bytes for both).
      * @param issuerApprovalSignature EIP-712 signature by the campaign's issuer approver.
      * @param resolverApprovalSignature EIP-712 signature by the campaign's resolver.
-     * @param entitlementProof Merkle proof that `request.entitlementId` is listed.
+     * @param entitlementProof Merkle proof for the *leaf* of `request.entitlementId`.
      */
     function settle(
         ClaimRequest calldata request,
@@ -271,7 +273,12 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
         if (_consumed[campaignId][request.entitlementId]) {
             revert EntitlementAlreadyConsumed(campaignId, request.entitlementId);
         }
-        if (!MerkleProof.verify(entitlementProof, campaign.entitlementRoot, request.entitlementId)) {
+
+        // Prove the *derived leaf*, not the raw identifier: the root and internal nodes
+        // are different preimage lengths, so none of them can be presented as an
+        // identifier and verified with a shortened proof.
+        bytes32 leaf = _leaf(request.entitlementId);
+        if (!MerkleProof.verify(entitlementProof, campaign.entitlementRoot, leaf)) {
             revert EntitlementNotListed(campaignId);
         }
 
@@ -319,11 +326,12 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
     // ------------------------------------------------------------------
 
     /**
-     * @notice Return the unused balance to the recovery destination fixed at funding.
+     * @notice Return the unused balance to the campaign's issuer.
      *
      * @dev Issuer-only and expiry-only. It depends on neither Gate attestation nor
      * claimant consent, so losing an approving key stops settlements but never
-     * strands the unused funds. It transfers exactly the unsettled portion and
+     * strands the unused funds — which is why funding forbids the issuer from also
+     * being an approving authority. It transfers exactly the unsettled portion and
      * touches nothing that was settled.
      */
     function reclaim(uint256 campaignId) external nonReentrant returns (uint256 amount) {
@@ -338,10 +346,10 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
         campaign.reclaimed = true;
         amount = uint256(campaign.entitlementCount - campaign.settlementCount) * uint256(campaign.allocation);
         if (amount > 0) {
-            USDC.safeTransfer(campaign.recoveryDestination, amount);
+            USDC.safeTransfer(campaign.issuer, amount);
         }
 
-        emit CampaignReclaimed(campaignId, campaign.recoveryDestination, amount);
+        emit CampaignReclaimed(campaignId, campaign.issuer, amount);
     }
 
     // ------------------------------------------------------------------
@@ -383,6 +391,46 @@ contract NomineClaimCore is EIP712, ReentrancyGuard {
         Campaign storage campaign = _campaigns[campaignId];
         if (campaign.reclaimed) return 0;
         return budgetOf(campaignId) - settledAmountOf(campaignId);
+    }
+
+    /** @dev The committed leaf for an entitlement identifier. */
+    function _leaf(bytes32 entitlementId) internal pure returns (bytes32) {
+        return keccak256(abi.encodePacked(entitlementId));
+    }
+
+    /** @dev Order-independent pair hash, matching OZ MerkleProof.verify. */
+    function _hashPair(bytes32 a, bytes32 b) private pure returns (bytes32) {
+        return a < b ? keccak256(abi.encodePacked(a, b)) : keccak256(abi.encodePacked(b, a));
+    }
+
+    /**
+     * @dev Derive the membership root from the exact identifier set. Requires the
+     * identifiers to be strictly ascending, which makes them non-zero and unique in
+     * one pass. The last node of an odd level is promoted unchanged, matching the
+     * off-chain tree builder.
+     */
+    function _commitmentFrom(bytes32[] calldata entitlementIds) private pure returns (bytes32) {
+        uint256 count = entitlementIds.length;
+        bytes32[] memory level = new bytes32[](count);
+        bytes32 previous;
+        for (uint256 i = 0; i < count; i++) {
+            bytes32 identifier = entitlementIds[i];
+            if (identifier <= previous) revert InvalidEntitlementSet();
+            previous = identifier;
+            level[i] = _leaf(identifier);
+        }
+
+        while (count > 1) {
+            uint256 nextCount = (count + 1) / 2;
+            for (uint256 i = 0; i < nextCount; i++) {
+                uint256 left = 2 * i;
+                uint256 right = left + 1;
+                level[i] = right < count ? _hashPair(level[left], level[right]) : level[left];
+            }
+            count = nextCount;
+        }
+
+        return level[0];
     }
 
     /** @dev EIP-712 struct hash of the claimant's request. */

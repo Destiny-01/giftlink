@@ -17,7 +17,6 @@ interface Fixture {
   issuer: HardhatEthersSigner;
   issuerApprover: HardhatEthersSigner;
   resolver: HardhatEthersSigner;
-  recovery: HardhatEthersSigner;
   claimant: HardhatEthersSigner;
   otherClaimant: HardhatEthersSigner;
   attacker: HardhatEthersSigner;
@@ -25,7 +24,7 @@ interface Fixture {
 }
 
 async function deployFixture(): Promise<Fixture> {
-  const [deployer, issuer, issuerApprover, resolver, recovery, claimant, otherClaimant, attacker, relayer] =
+  const [deployer, issuer, issuerApprover, resolver, claimant, otherClaimant, attacker, relayer] =
     await ethers.getSigners();
 
   const usdc = await (await ethers.getContractFactory("MockUSDC")).deploy();
@@ -42,7 +41,6 @@ async function deployFixture(): Promise<Fixture> {
     issuer,
     issuerApprover,
     resolver,
-    recovery,
     claimant,
     otherClaimant,
     attacker,
@@ -85,7 +83,6 @@ async function fundCampaign(
     expiryTime?: bigint;
     issuerApprover?: string;
     resolver?: string;
-    recoveryDestination?: string;
     issuer?: HardhatEthersSigner;
     mintAmount?: bigint;
     approveAmount?: bigint;
@@ -99,12 +96,12 @@ async function fundCampaign(
   const issuer = options.issuer ?? fx.issuer;
 
   const salt = ethers.hexlify(ethers.randomBytes(16));
-  const entitlementIds = Array.from({ length: count }, (_, index) =>
+  const identifiers = Array.from({ length: count }, (_, index) =>
     ethers.keccak256(ethers.toUtf8Bytes(`nomine:entitlement:${salt}:${index}`)),
   );
-  const tree = buildMerkleTree(entitlementIds);
+  const tree = buildMerkleTree(identifiers);
 
-  const budget = BigInt(count) * allocation;
+  const budget = BigInt(tree.identifiers.length) * allocation;
   await fx.usdc.mint(await issuer.getAddress(), options.mintAmount ?? budget);
   await fx.usdc
     .connect(issuer)
@@ -113,12 +110,10 @@ async function fundCampaign(
   const tx = await fx.core.connect(issuer).createCampaign({
     issuerApprover: options.issuerApprover ?? fx.issuerApprover.address,
     resolver: options.resolver ?? fx.resolver.address,
-    recoveryDestination: options.recoveryDestination ?? fx.recovery.address,
     allocation,
-    entitlementCount: count,
     openingTime,
     expiryTime,
-    entitlementRoot: tree.root,
+    entitlementIds: tree.identifiers,
   });
   const receipt = await tx.wait();
 
@@ -135,7 +130,7 @@ async function fundCampaign(
   }
   expect(campaignId).to.not.equal(0n, "CampaignFunded was not emitted");
 
-  return { campaignId, entitlementIds, tree, openingTime, expiryTime };
+  return { campaignId, entitlementIds: tree.identifiers, tree, openingTime, expiryTime };
 }
 
 interface SignedSettlement {
@@ -247,7 +242,6 @@ describe("NomineClaimCore", () => {
       expect(campaign.issuer).to.equal(fx.issuer.address);
       expect(campaign.issuerApprover).to.equal(fx.issuerApprover.address);
       expect(campaign.resolver).to.equal(fx.resolver.address);
-      expect(campaign.recoveryDestination).to.equal(fx.recovery.address);
       expect(campaign.allocation).to.equal(ALLOCATION);
       expect(campaign.entitlementCount).to.equal(3n);
       expect(campaign.settlementCount).to.equal(0n);
@@ -267,42 +261,47 @@ describe("NomineClaimCore", () => {
       ).to.be.revertedWithCustomError(fx.core, "AuthoritiesNotDistinct");
     });
 
-    it("refuses a recovery destination that would strand or burn the funds", async () => {
-      await expect(
-        fundCampaign(fx, { recoveryDestination: fx.coreAddress }),
-      ).to.be.revertedWithCustomError(fx.core, "InvalidRecoveryDestination");
-      await expect(
-        fundCampaign(fx, { recoveryDestination: await fx.usdc.getAddress() }),
-      ).to.be.revertedWithCustomError(fx.core, "InvalidRecoveryDestination");
+    it("refuses an issuer that is also an approving authority", async () => {
+      // Otherwise losing an approving key could remove the only address able to
+      // trigger expiry recovery.
+      await expect(fundCampaign(fx, { issuerApprover: fx.issuer.address })).to.be.revertedWithCustomError(
+        fx.core,
+        "IssuerIsAnApprover",
+      );
+      await expect(fundCampaign(fx, { resolver: fx.issuer.address })).to.be.revertedWithCustomError(
+        fx.core,
+        "IssuerIsAnApprover",
+      );
     });
 
-    it("refuses a zero allocation, zero count, or empty commitment", async () => {
-      const tree = buildMerkleTree([
+    it("refuses an empty, zero, unsorted, or duplicate entitlement set", async () => {
+      const now = await latestTimestamp();
+      const ids = [
         ethers.keccak256(ethers.toUtf8Bytes("entitlement-a")),
         ethers.keccak256(ethers.toUtf8Bytes("entitlement-b")),
-      ]);
-      const now = await latestTimestamp();
+      ].sort();
       const base = {
         issuerApprover: fx.issuerApprover.address,
         resolver: fx.resolver.address,
-        recoveryDestination: fx.recovery.address,
         allocation: ALLOCATION,
-        entitlementCount: 2,
         openingTime: now,
         expiryTime: now + DAY,
-        entitlementRoot: tree.root,
       };
+      const create = (entitlementIds: string[]) =>
+        fx.core.connect(fx.issuer).createCampaign({ ...base, entitlementIds });
 
-      await expect(fx.core.connect(fx.issuer).createCampaign({ ...base, allocation: 0n })).to.be.revertedWithCustomError(
+      await expect(create([])).to.be.revertedWithCustomError(fx.core, "InvalidEntitlementSet");
+      await expect(create([ethers.ZeroHash])).to.be.revertedWithCustomError(fx.core, "InvalidEntitlementSet");
+      await expect(create([ethers.ZeroHash, ids[0]])).to.be.revertedWithCustomError(
         fx.core,
-        "ZeroValue",
+        "InvalidEntitlementSet",
       );
-      await expect(
-        fx.core.connect(fx.issuer).createCampaign({ ...base, entitlementCount: 0 }),
-      ).to.be.revertedWithCustomError(fx.core, "ZeroValue");
-      await expect(
-        fx.core.connect(fx.issuer).createCampaign({ ...base, entitlementRoot: ethers.ZeroHash }),
-      ).to.be.revertedWithCustomError(fx.core, "ZeroValue");
+      await expect(create([ids[1], ids[0]])).to.be.revertedWithCustomError(fx.core, "InvalidEntitlementSet");
+      await expect(create([ids[0], ids[0]])).to.be.revertedWithCustomError(fx.core, "InvalidEntitlementSet");
+    });
+
+    it("refuses a zero allocation", async () => {
+      await expect(fundCampaign(fx, { allocation: 0n })).to.be.revertedWithCustomError(fx.core, "ZeroValue");
     });
 
     it("refuses a window that is closed or already in the past", async () => {
@@ -544,6 +543,36 @@ describe("NomineClaimCore", () => {
       await expect(submitSettlement(fx, signed)).to.be.revertedWithCustomError(fx.core, "EntitlementNotListed");
     });
 
+    it("rejects the campaign root and internal nodes presented as entitlements", async () => {
+      // Leaves are hashed, so the root and internal nodes are not identifiers and
+      // cannot be verified even with shortened proofs, whatever the signatures say.
+      const handle = await fundCampaign(fx, { entitlementCount: 4 });
+
+      const rootAttempt = await signSettlement(fx, handle, handle.tree.root, fx.claimant);
+      await expect(submitSettlement(fx, rootAttempt)).to.be.revertedWithCustomError(
+        fx.core,
+        "EntitlementNotListed",
+      );
+
+      expect(handle.tree.internalNodes.length).to.be.greaterThan(0);
+      const node = handle.tree.internalNodes[0];
+      const nodeAttempt = await signSettlement(fx, handle, node, fx.claimant);
+      await expect(submitSettlement(fx, nodeAttempt)).to.be.revertedWithCustomError(
+        fx.core,
+        "EntitlementNotListed",
+      );
+      expect(await fx.core.isEntitlementConsumed(handle.campaignId, node)).to.equal(false);
+    });
+
+    it("rejects a valid proof for a different listed entitlement", async () => {
+      const handle = await fundCampaign(fx, { entitlementCount: 4 });
+      // A real, correctly-shaped proof — but for a sibling identifier.
+      const signed = await signSettlement(fx, handle, handle.entitlementIds[0], fx.claimant);
+      await expect(
+        submitSettlement(fx, { ...signed, proof: handle.tree.proof(handle.entitlementIds[1]) }),
+      ).to.be.revertedWithCustomError(fx.core, "EntitlementNotListed");
+    });
+
     it("rejects reuse of a consumed entitlement with fresh signatures or a new wallet", async () => {
       const handle = await fundCampaign(fx);
       const entitlementId = handle.entitlementIds[0];
@@ -634,6 +663,23 @@ describe("NomineClaimCore", () => {
   });
 
   describe("capacity", () => {
+    it("funds and settles every listed entitlement irrespective of arrival order", async () => {
+      const handle = await fundCampaign(fx, { entitlementCount: 3 });
+      const campaign = await fx.core.getCampaign(handle.campaignId);
+      expect(campaign.entitlementCount).to.equal(handle.tree.identifiers.length);
+
+      // Settle out of tree order: capacity depends on the committed set, not on arrival.
+      const reordered = [handle.entitlementIds[2], handle.entitlementIds[0], handle.entitlementIds[1]];
+      for (const entitlementId of reordered) {
+        const signed = await signSettlement(fx, handle, entitlementId, fx.claimant);
+        await expect(submitSettlement(fx, signed)).to.not.be.reverted;
+      }
+
+      expect((await fx.core.getCampaign(handle.campaignId)).settlementCount).to.equal(3n);
+      expect(await fx.core.remainingUnsettledOf(handle.campaignId)).to.equal(0n);
+      expect(await fx.usdc.balanceOf(fx.coreAddress)).to.equal(0n);
+    });
+
     it("fully settles every listed entitlement and offers no further settlement", async () => {
       const handle = await fundCampaign(fx, { entitlementCount: 2 });
       for (const entitlementId of handle.entitlementIds) {
@@ -677,7 +723,7 @@ describe("NomineClaimCore", () => {
       );
     });
 
-    it("returns only the unused balance to the fixed destination and leaves settled funds untouched", async () => {
+    it("returns only the unused balance to the issuer and leaves settled funds untouched", async () => {
       const handle = await fundCampaign(fx, { entitlementCount: 4 });
       const signed = await signSettlement(fx, handle, handle.entitlementIds[0], fx.claimant);
       await submitSettlement(fx, signed);
@@ -687,7 +733,7 @@ describe("NomineClaimCore", () => {
       const expected = 3n * ALLOCATION;
       await expect(fx.core.connect(fx.issuer).reclaim(handle.campaignId)).to.changeTokenBalance(
         fx.usdc,
-        fx.recovery,
+        fx.issuer,
         expected,
       );
 

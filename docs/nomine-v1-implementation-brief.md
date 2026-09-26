@@ -65,8 +65,10 @@ The first campaign is the smallest thing that proves the loop. It has exactly on
   is backed by its own allocation, so there is no cap the eligible list may exceed and no remainder from
   a non-divisible budget. Superseded: the earlier `cap = floor(budget / allocation)` with a settleable
   remainder assumed a list that could be larger than the funded cap.
-- **One eligibility commitment (D-019):** a Merkle commitment over the actual entitlement identifiers,
-  fixed at funding. Settlement proves membership against it. The earlier brief treated the on-chain
+- **One eligibility commitment (D-019):** the actual entitlement identifiers, supplied at funding in
+  ascending order; the contract derives the Merkle commitment over their hashed leaves and takes the
+  committed set's length as the entitlement count. Settlement proves membership of a hashed leaf, so the
+  root and internal nodes can never be presented as an entitlement. The earlier brief treated the on-chain
   commitment as optional (Q1); D-019 makes it required.
 - **One eligibility set:** a single declared private allowlist resolved by a named Resolver.
 - **One opening time and one expiry time**, both fixed at funding.
@@ -93,7 +95,8 @@ is only that no stored status may disagree with chain facts.) The legacy contrac
 column and an hourly job (`link-backend/src/jobs/expireDropsJob.ts:6-52`) — and the audit found the two
 can disagree. Instead, store **facts** and derive the phase from facts plus the clock:
 
-Stored facts: the allocation and entitlement count, `settlementCount`, `openingTime`, `expiryTime`,
+Stored facts: the allocation, the committed entitlement count (derived from the supplied set at funding),
+`settlementCount`, `openingTime`, `expiryTime`,
 the entitlement-identifier commitment, whether the reclaimable balance has been returned, plus
 per-identifier consumption. Nothing else is stored. The budget, the settled total, the remaining total
 and the reclaimable total are all determined by those facts, and a stored copy of any of them would be
@@ -379,15 +382,16 @@ the phase gating: it may ship before Phase A. Everything else depends on the pha
 Build the minimal contract defined in the build brief. Deliverables:
 
 - Campaign struct holding: issuer, USDC asset, allocation, entitlement count, entitlement commitment,
-  declared issuer approver, declared Resolver, opening time, expiry time, **recovery destination**,
-  settlement count, and a reclaim flag. The recovery destination is stored explicitly rather than assumed
-  to be the issuer; the pilot uses the issuer address (D-019). The derived totals (`budget`, `settled`,
-  `remaining`, `reclaimable`) are computed exactly as in §3.1, so none of them is a stored field.
-  Funding requires `allocation > 0` and `entitlementCount >= 1` (§3.1).
+  declared issuer approver, declared Resolver, opening time, expiry time, settlement count, and a reclaim
+  flag. The issuer is also the recovery destination fixed at funding (D-019), and neither approving
+  authority may be the issuer, so a lost approving key cannot remove the only address able to trigger
+  recovery. Funding takes the actual entitlement identifiers, derives the commitment and the count from
+  them, and requires a non-empty set; the derived totals (`budget`, `settled`, `remaining`, `reclaimable`)
+  are computed exactly as in §3.1, so none of them is a stored field.
 - `settle(claimRequest, claimantSignature, approval, issuerApprovalSignature, resolverApprovalSignature,
-  entitlementProof)` with EIP-712 domain separation, a membership proof against the committed identifier
-  set, identifier consumption before transfer, and a fixed `allocation` transfer directly to the wallet
-  the claimant signed for.
+  entitlementProof)` with EIP-712 domain separation, a membership proof of the hashed leaf against the
+  committed identifier set, identifier consumption before transfer, and a fixed `allocation` transfer
+  directly to the wallet the claimant signed for.
 - `reclaim()` callable by the issuer only, and only at or after `expiryTime`, transferring exactly
   `reclaimable = budget − settledAmount` to the recovery destination fixed at funding. Exhaustion does
   not open an earlier path, and reclaim needs neither Gate attestation nor claimant consent.
@@ -436,8 +440,9 @@ re-point of the legacy claim path, which needs nothing from the new contract and
 
 ### Phase C — Nomine Studio (issuer surface)
 
-- Create and configure a campaign: allocation, budget, eligibility source, opening, expiry, recovery
-  destination. Review-before-funding is a required step, not a convenience.
+- Create and configure a campaign: allocation, the funded entitlement set (whose size is the budget),
+  eligibility source, opening, expiry. Recovery returns to the issuer; there is no separate recipient to
+  choose. Review-before-funding is a required step, not a convenience.
 - Fund on Arc; show the confirmed funding transaction.
 - Monitor funded, settled, remaining, exhausted, expired, and reclaimed — read from chain, not from a
   status column.
@@ -527,7 +532,7 @@ Each item is a **Proposal**, not a settled decision, and none has been recorded 
 | --- | --- | --- | --- | --- |
 | Q1 | **Eligibility source details** — shape, scoping, and freshness of the declared set | **(Resolved by D-019):** the entitlement-identifier commitment is fixed on-chain at funding, and settlement proves membership against it | Resolved | The commitment over the actual identifiers is now required, not optional; it makes the Gate verifiable after the fact and prevents an unlisted identifier from settling |
 | Q2 | **Wallet/identity binding and identifier derivation** | (a) `H(campaignId, identityCommitment, campaignSalt)` with a server secret; (b) `H(campaignId, privyId)`; (c) wallet-address-scoped entitlement | (a), with the secret in a dedicated key rather than reusing the legacy `SERVER_PEPPER` commitment scheme; **D-019** requires the identifier to be high-entropy and campaign-specific, with the set committed at funding | Fixes the uniqueness rule (§6) and the privacy boundary; the wrong choice permits either double settlement or identity linkage |
-| Q3 | **Recovery recipient semantics** | (a) always the issuer address; (b) a recovery destination fixed at funding and immutable; (c) a protocol default | (b) — matches "rules fixed when the campaign was created"; the pilot uses the issuer address (**D-019**) | Determines whether R6 is enforceable; funded campaigns are immutable, so the destination cannot change after funding |
+| Q3 | **Recovery recipient semantics** | **(Resolved by D-019):** the recovery destination is the issuer fixed at funding; the contract stores no separate recipient | Resolved | R6 is enforceable and the destination cannot change after funding; requiring the issuer to differ from both approving authorities keeps recovery reachable if an approving key is lost |
 | Q4 | **Gas sponsorship model** | (a) keep the existing relayer; (b) Circle Paymaster / App Kit; (c) claimant pays | (a) for the proof, with a per-settlement reimbursement cap (I8), since it already works and R9 only requires that the claimant not handle gas | Affects cost, trust, and whether the relayer becomes a payout authority (audit §2.2) |
 | Q5 | **Privacy commitments** — secret management, what is logged, retention | Not a binary choice; a policy is needed | No raw identifier, private eligibility record, or identity token in any log; authorization copies logged only where settlement and reconciliation require them, since the authorization is public calldata once submitted but is still live and single-use before that; commitments derived with a dedicated secret; documented retention | D-008 constrains public logs and on-chain data; the current gaps are in application logs (audit §2.11) |
 | Q6 | **Signer powers** — what the coordination signer may authorize | **(Resolved by D-019):** no single signer. Each settlement requires the claimant's consent plus both an independent issuer approver and the Resolver over the same signed request | Resolved | Rotation is no longer a mitigation: funded campaigns are immutable and approving keys cannot be replaced. Losing a key stops settlement until expiry but never strands recovery (R18) |
