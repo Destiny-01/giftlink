@@ -51,6 +51,8 @@ Active escrow cannot be swept or redirected. No owner, administrator, Resolver, 
 
 The contract cannot prove ownership of an off-chain identity. Wallet consent proves control of the wallet, not ownership of the identity behind an entitlement, and a fixed eligibility commitment does not eliminate that. Collusion between the two Gate authorities remains an explicit Gate-trust risk: they could assign an unused entitlement to a wallet they control and sign as that wallet. The product discloses this rather than presenting attested facts as trustless. The issuer approval key is held outside Nomine, and the issuer independently verifies the identity-to-wallet assignment through a known channel.
 
+The contract has no revocation. Changing wallet, signing again, disconnecting, or deleting a pending request does not invalidate an already-signed live authorization, so the product presents wallet-change and re-sign behaviour honestly rather than implying a cancel.
+
 Some eligibility facts originate outside the blockchain. The system does not present those facts as trustless; it identifies the Resolver or issuer responsible for them and enforces the resulting authorization consistently.
 
 Raw email addresses, social identifiers, secrets, and private eligibility data are not published on-chain or included in public logs. Claimants should be able to check their own eligibility without exposing another person's status.
@@ -60,14 +62,14 @@ Raw email addresses, social identifiers, secrets, and private eligibility data a
 The current release is an Arc-native proof of the core issuer-to-claimant loop:
 
 - A fixed-allocation community campaign funded with USDC on Arc, where every listed entitlement is fully backed by its own allocation and there is no eligible-list oversubscription.
-- One clearly declared, Resolver-backed eligibility source, fixed at funding.
+- One clearly declared, Resolver-backed eligibility source, fixed at funding. For the first controlled pilot the sole method is **verified email**, derived server-side from the identity provider and mapped to a high-entropy, campaign-specific entitlement identifier — never a public hash of the email.
 - A single-use authorization for each eligible claimant.
 - Dual attestation: the claimant signs the payout, then an independently held issuer approval and a Nomine Resolver approval attest that exact signed request.
 - Immutable funded rules: allocation, entitlement commitment, approving authorities, opening time, expiry, and the issuer's fixed recovery cannot change after funding.
 - Direct USDC settlement only.
 - Opening time, expiry, and deterministic issuer reclaim that requires neither Gate attestation nor claimant consent.
 - An issuer view of funded, settled, remaining, and reclaimed value.
-- A claimant experience with **Available**, **Completed**, and **Expired** inbox states, plus an **Awaiting issuer confirmation** workflow status while an approval is pending.
+- A claimant experience with **Available**, **Completed**, and **Expired** inbox states. Approval and submission progress are workflow statuses inside **Available**, including **Awaiting issuer confirmation**. A funded Claim before its opening time appears under **Available** with an explicit **Opens** date and time in the relevant timezone, and claiming is disabled until then (D-020).
 - Arc transaction receipts and explorer visibility.
 
 The current release does not include swaps, liquidity positions, arbitrary settlement callbacks, milestone programs, streams, cross-chain settlement, open Resolver or solver markets, agent-issued Claims, or a protocol token.
@@ -83,12 +85,12 @@ The current release does not include swaps, liquidity positions, arbitrary settl
 
 ### Claim funded value
 
-1. A claimant opens the Claim and sees the issuer, amount, funding status, Gate, expiry, and settlement outcome.
+1. A claimant opens the Claim and sees the issuer, amount, funding status, Gate, expiry with timezone, and the fixed recovery rule. A funded Claim before its opening time shows an explicit **Opens** time with claiming disabled (D-020).
 2. The claimant authenticates and connects or creates a wallet.
 3. The interface discloses the confirmation requirement, and the claimant signs the exact payout — campaign, entitlement, their selected wallet, amount, chain, contract, and deadline.
 4. The Resolver verifies the declared eligibility condition and the issuer independently verifies the identity-to-wallet assignment through a known channel. Both then attest the same signed request. While an approval is pending, the inbox shows **Awaiting issuer confirmation** — a workflow status, not a settled receipt; expiry still applies while it is pending.
 5. A sponsored transaction settles USDC on Arc once the claimant's consent and both attestations are present.
-6. The claimant receives an on-chain receipt and the inbox records the Claim as completed.
+6. The claimant receives an on-chain receipt and the inbox records the Claim as completed. Only a verified settlement event consumes the entitlement and marks it completed; a signed request or a transaction hash is not settlement.
 
 ### Expire and recover
 
@@ -110,5 +112,5 @@ The current release does not include swaps, liquidity positions, arbitrary settl
 | **Settlement** | The on-chain execution of an approved Claim outcome. |
 | **Economic inbox** | The claimant-facing record of funded Claims that are available, completed, or expired. |
 | **Recovery** | The predefined return of unused value after expiry. |
-| **Nullifier / nonce** | A unique value used to prevent an entitlement or authorization from being reused. |
+| **Entitlement identifier** | A high-entropy, campaign-specific value that stands in for an off-chain identity, is committed at funding, and is consumed exactly once at settlement. It is never derived from raw identity data. |
 

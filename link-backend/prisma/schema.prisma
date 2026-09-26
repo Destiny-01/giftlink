@@ -132,3 +132,154 @@ enum SocialIdentifierType {
   DISCORD
   TWITTER
 }
+
+// ----------------------------------------------------------------------------
+// Nomine Claim Core (docs/nomine-claim-core-integration.md §6)
+//
+// One immutable, fully funded campaign per funding call. Identifiers are opaque
+// 32-byte values; raw emails are never stored, only HMAC-SHA256(SERVER_PEPPER,
+// normalizedEmail) (D-008).
+// ----------------------------------------------------------------------------
+
+model Campaign {
+  id                    String         @id @default(uuid())
+  chainId               Int
+  contractAddress       String
+  onchainId             BigInt?
+  issuerPrivyId         String
+  issuerAddress         String
+  issuerApproverAddress String
+  resolverAddress       String
+  /// Allocation per entitlement in USDC base units, as a decimal string.
+  allocation            String
+  entitlementCount      Int
+  fundingTxHash         String?
+  /// Commitment to the exact config that was prepared; confirm compares it.
+  paramsHash            String
+  openingTime           DateTime
+  expiryTime            DateTime
+  status                CampaignStatus @default(DRAFT)
+  reclaimedTxHash       String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  entitlements Entitlement[]
+  requests     ClaimRequest[]
+  events       ClaimEvent[]
+
+  @@unique([chainId, contractAddress, onchainId])
+  @@index([issuerPrivyId])
+  @@index([status])
+  @@index([contractAddress, chainId])
+}
+
+model Entitlement {
+  id               String    @id @default(uuid())
+  campaignId       String
+  campaign         Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// Opaque campaign-specific identifier: 32 random bytes, never derived from an email.
+  entitlementId    String
+  /// HMAC-SHA256(SERVER_PEPPER, normalizedEmail). The raw email is never stored.
+  emailHash        String
+  consumedAt       DateTime?
+  settlementTxHash String?
+  claimantAddress  String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@unique([campaignId, entitlementId])
+  @@unique([campaignId, emailHash])
+  @@index([campaignId])
+  @@index([emailHash])
+  @@index([settlementTxHash])
+}
+
+model ClaimRequest {
+  id                      String             @id @default(uuid())
+  campaignId              String
+  campaign                Campaign           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// The entitlement identifier the request is for (bytes32 hex).
+  entitlementId           String
+  walletAddress           String
+  /// The exact allocation, in USDC base units as a decimal string.
+  amount                  String
+  deadline                DateTime
+  status                  ClaimRequestStatus @default(CONSENTED)
+  consentSignature        String?
+  consentDigest           String?
+  issuerApprovalSignature String?
+  resolverSignature       String?
+  submitTxHash            String?
+  settlementTxHash        String?
+  failureReason           String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+
+  /// One live request per entitlement: the row is claimed by a conditional update.
+  @@unique([campaignId, entitlementId])
+  @@index([campaignId])
+  @@index([walletAddress])
+  @@index([status])
+  @@index([submitTxHash])
+}
+
+/// Canonical indexed chain events. Unique on (txHash, logIndex) is the dedup ledger.
+model ClaimEvent {
+  id                String         @id @default(uuid())
+  chainId           Int
+  contractAddress   String
+  eventType         ClaimEventType
+  /// Null until the campaign this event names is bound locally.
+  campaignId        String?
+  campaign          Campaign?      @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  onchainCampaignId BigInt
+  entitlementId     String?
+  walletAddress     String?
+  amount            String?
+  txHash            String
+  logIndex          Int
+  blockNumber       BigInt
+  blockTimestamp    DateTime?
+  /// Public on-chain facts only; never identity data.
+  metadata          Json?
+  createdAt         DateTime       @default(now())
+
+  @@unique([txHash, logIndex])
+  @@index([eventType])
+  @@index([campaignId])
+  @@index([onchainCampaignId])
+  @@index([entitlementId])
+}
+
+/// One row per (chainId, contractAddress): the last block the indexer has scanned.
+model ChainCheckpoint {
+  id               String   @id @default(uuid())
+  chainId          Int
+  contractAddress  String
+  lastScannedBlock BigInt
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([chainId, contractAddress])
+}
+
+enum CampaignStatus {
+  DRAFT
+  FUNDED
+  RECLAIMED
+}
+
+enum ClaimRequestStatus {
+  CONSENTED
+  ISSUER_APPROVED
+  SUBMITTED
+  SETTLED
+  FAILED
+  EXPIRED
+}
+
+enum ClaimEventType {
+  CAMPAIGN_FUNDED
+  SETTLEMENT
+  CAMPAIGN_RECLAIMED
+}

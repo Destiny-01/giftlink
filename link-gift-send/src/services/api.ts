@@ -14,6 +14,20 @@ import type {
   StatsResponse,
   UserDropsResponse,
 } from "@/types/gift";
+import type {
+  CampaignPublicView,
+  CampaignRequestsResponse,
+  ClaimRequestDetailResponse,
+  ConfirmCampaignResponse,
+  InboxResponse,
+  IssuerApprovalRequestResponse,
+  NomineCampaign,
+  PrepareCampaignRequest,
+  PrepareCampaignResponse,
+  SettleRequestResponse,
+  SubmitConsentRequest,
+  SubmitConsentResponse,
+} from "@/types/nomine";
 import { ApiError, normalizeError, parseErrorResponse } from "@/lib/utils";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.giftlink.arc";
@@ -502,4 +516,201 @@ export function dropToGift(drop: DropSummary): Gift {
     revokeTxHash,
     canClaim: drop.canClaim,
   };
+}
+
+/* ==========================================================================
+ * Nomine Claim Core - spec §8 endpoints
+ * Canonical contract: docs/nomine-claim-core-integration.md. All routes are
+ * under /api and carry the Privy bearer token via fetchWithAuth.
+ * ========================================================================== */
+
+/**
+ * Issuer: normalize/dedup emails, assign identifiers, persist DRAFT, and return the exact
+ * CampaignConfig payload the funding wallet must submit plus count, budget and root.
+ */
+export async function prepareNomineCampaign(
+  payload: PrepareCampaignRequest
+): Promise<PrepareCampaignResponse> {
+  try {
+    const response = await fetchWithAuth("/api/campaigns/prepare", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/**
+ * Issuer: verify the canonical CampaignFunded event matches the stored config exactly and mark
+ * FUNDED. Idempotent.
+ */
+export async function confirmNomineCampaign(
+  campaignId: string,
+  txHash: string
+): Promise<ConfirmCampaignResponse> {
+  try {
+    const response = await fetchWithAuth(
+      `/api/campaigns/${campaignId}/confirm`,
+      {
+        method: "POST",
+        body: JSON.stringify({ txHash }),
+      }
+    );
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/** Issuer: the authenticated issuer's campaigns with chain totals. */
+export async function getNomineCampaigns(): Promise<NomineCampaign[]> {
+  try {
+    const response = await fetchWithAuth("/api/campaigns");
+    const data = await response.json();
+    return data.campaigns ?? data;
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/** Issuer-only detail incl. private roster summary and accounting. */
+export async function getNomineCampaign(
+  campaignId: string
+): Promise<NomineCampaign> {
+  try {
+    const response = await fetchWithAuth(`/api/campaigns/${campaignId}`);
+    const data = await response.json();
+    return data.campaign ?? data;
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/** Issuer-only approval requests (consent + wallet + amount + deadline). */
+export async function getNomineCampaignRequests(
+  campaignId: string
+): Promise<CampaignRequestsResponse> {
+  try {
+    const response = await fetchWithAuth(`/api/campaigns/${campaignId}/requests`);
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/**
+ * Issuer: submit the signature produced by the distinct external approval wallet. The server
+ * verifies it recovers to the campaign's configured issuerApprover.
+ */
+export async function submitNomineIssuerApproval(
+  campaignId: string,
+  requestId: string,
+  signature: string
+): Promise<IssuerApprovalRequestResponse> {
+  try {
+    const response = await fetchWithAuth(
+      `/api/campaigns/${campaignId}/requests/${requestId}/issuer-approval`,
+      {
+        method: "POST",
+        body: JSON.stringify({ signature }),
+      }
+    );
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/** Issuer: verify CampaignReclaimed and mark RECLAIMED. Recovery needs no approver. */
+export async function confirmNomineRecovery(
+  campaignId: string,
+  txHash: string
+): Promise<{ campaign: NomineCampaign }> {
+  try {
+    const response = await fetchWithAuth(
+      `/api/campaigns/${campaignId}/recover/confirm`,
+      {
+        method: "POST",
+        body: JSON.stringify({ txHash }),
+      }
+    );
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/** Public link view (no roster). Auth token is attached when available. */
+export async function getNomineCampaignPublic(
+  campaignId: string
+): Promise<CampaignPublicView> {
+  try {
+    const response = await fetchWithAuth(`/api/campaigns/${campaignId}/public`);
+    const data = await response.json();
+    return data.campaign ?? data;
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/** Claimant: the authenticated claimant's own funded entitlements. */
+export async function getNomineInbox(): Promise<InboxResponse> {
+  try {
+    const response = await fetchWithAuth("/api/inbox");
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/** Claimant: server-side verified-email eligibility + signature check, then a CONSENTED request. */
+export async function submitNomineConsent(
+  campaignId: string,
+  payload: SubmitConsentRequest
+): Promise<SubmitConsentResponse> {
+  try {
+    const response = await fetchWithAuth(`/api/campaigns/${campaignId}/consent`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/** Owner or issuer: status + receipt for a single request. */
+export async function getNomineClaimRequest(
+  campaignId: string,
+  requestId: string
+): Promise<ClaimRequestDetailResponse> {
+  try {
+    const response = await fetchWithAuth(
+      `/api/campaigns/${campaignId}/requests/${requestId}`
+    );
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+/**
+ * Claimant: sponsored relay. Requires consent + issuer approval; attaches the Resolver
+ * attestation and broadcasts from the relayer wallet. Idempotent and safe to retry.
+ */
+export async function sponsorNomineSettle(
+  campaignId: string,
+  requestId: string
+): Promise<SettleRequestResponse> {
+  try {
+    const response = await fetchWithAuth(
+      `/api/campaigns/${campaignId}/requests/${requestId}/settle`,
+      { method: "POST" }
+    );
+    return await response.json();
+  } catch (error) {
+    throw normalizeError(error);
+  }
 }

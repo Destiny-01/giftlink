@@ -16,6 +16,11 @@ const relayer = new Wallet("0x" + "22".repeat(32));
 export const TEST_CONTRACT_ADDRESS =
   "0x1111111111111111111111111111111111111111";
 export const TEST_USDC_ADDRESS = "0x2222222222222222222222222222222222222222";
+/**
+ * Nomine Claim Core. Deliberately a distinct, synthetic address from the legacy GiftLink
+ * contract so a test can prove nothing falls back from one to the other (§1).
+ */
+export const TEST_CLAIM_CORE_ADDRESS = "0x3333333333333333333333333333333333333333";
 export const TEST_CHAIN_ID = 31337;
 
 process.env.NODE_ENV = "test";
@@ -23,6 +28,7 @@ process.env.LOG_LEVEL = "silent";
 process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/giftlink_test";
 process.env.RPC_URL = "http://127.0.0.1:8545";
 process.env.GIFTLINK_CONTRACT_ADDRESS = TEST_CONTRACT_ADDRESS;
+process.env.CLAIM_CORE_CONTRACT_ADDRESS = TEST_CLAIM_CORE_ADDRESS;
 process.env.USDC_CONTRACT_ADDRESS = TEST_USDC_ADDRESS;
 process.env.CHAIN_ID = String(TEST_CHAIN_ID);
 process.env.BACKEND_SIGNER_PRIVATE_KEY = "0x" + "11".repeat(32);

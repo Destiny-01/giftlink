@@ -11,6 +11,16 @@ const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   RPC_URL: z.string().url(),
   GIFTLINK_CONTRACT_ADDRESS: z.string().regex(ethAddressRegex),
+  /**
+   * Nomine Claim Core (`docs/nomine-claim-core-integration.md` §1).
+   *
+   * Required, with **no default and no fallback**: a value that silently pointed at a
+   * legacy contract or another chain would sign settlements against the wrong deployment,
+   * which is the one failure the integration contract says the client must never allow
+   * (§1: "Configuration is explicit and fails closed"). There is deliberately no
+   * `CLAIM_CORE_CONTRACT_ADDRESS ?? GIFTLINK_CONTRACT_ADDRESS` anywhere in this service.
+   */
+  CLAIM_CORE_CONTRACT_ADDRESS: z.string().regex(ethAddressRegex),
   USDC_CONTRACT_ADDRESS: z.string().regex(ethAddressRegex),
   CHAIN_ID: z.coerce.number(),
   BACKEND_SIGNER_PRIVATE_KEY: z.string().regex(hexStringRegex),

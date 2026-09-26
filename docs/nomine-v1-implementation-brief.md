@@ -19,7 +19,7 @@ Q6) — funded campaigns are immutable and keys cannot be replaced; and the cap/
 possibly larger eligible list (§2, §3.1) — every listed entitlement is now fully funded for its own
 allocation, with no oversubscription. §3.4's three Inbox states still hold; the **Awaiting issuer
 confirmation** status D-019 adds sits alongside them. Sections below are annotated where D-019 changes
-them, and §10 Q1, Q6, Q7 and Q8 are now resolved.
+them, and §10 Q1, Q3, Q6, Q7, Q8 and Q9 are now resolved (Q9 by D-020).
 
 **Prerequisite reading:** `docs/foundation-audit.md` (what exists today), `docs/BRAND.md`,
 `brand/IMPLEMENTATION.md`, `brand/approved/GUIDELINES.md`.
@@ -221,17 +221,14 @@ Three states only (R10), each derived from the facts above — never from a data
 | **Completed** | entitlement `Settled` on-chain, receipt decodable | show settled amount and the transaction reference |
 | **Expired** | this entitlement will never settle because the campaign's declared expiry passed with it unsettled | state the expiry and that unused capital returns under the recovery rule fixed at funding |
 
-**The boundary presentation is proposed, not settled (Q9).** Two cases fall outside what the settled
-sources decide: what a claimant sees **before an unopened campaign opens**, and what they see **after an
-exhausted campaign reaches its entitlement count before expiry**. What *is* settled about both: settlement is refused,
-reclaim remains expiry-only, and there are exactly three states. Which label carries each window is
-material product semantics — it changes what "Available" and "Expired" mean to a claimant — so this brief
-does not prescribe it. The proposal under Q9 is to present the pre-opening claim as `Available` with the
-opening time stated, and the post-exhaustion claim as `Expired` with fully-allocated copy. §3.5 is written
-on that basis and marks those two cells as proposed. Q9 must be resolved in `docs/DECISIONS.md` before the
-Inbox boundary presentation is implemented (§7 Phase D, §12 item 12). The proposal in (a) introduces no
-fourth state; option (c) would require R10 itself to be revisited, which is precisely why it is a product
-decision rather than an implementation detail.
+**The boundary presentation is resolved (D-020).** Two cases fall outside what the settled sources decide:
+what a claimant sees **before an unopened campaign opens**, and what they see **after an exhausted campaign
+reaches its entitlement count before expiry**. D-020 settles both. A funded pre-opening Claim appears under
+`Available` with an explicit **Opens <date and time>** label in the relevant timezone and claiming disabled
+until opening; it is never presented as immediately claimable. And no oversubscription exists to produce an
+exhausted-cap window, because the deployed Core funds every listed entitlement for its own allocation.
+Approval and transaction workflow states are workflow statuses inside `Available`, not lifecycle groups.
+§3.5 reflects this and the three states are unchanged (§7 Phase D, §12 item 12).
 
 `Available` is a lifecycle state, not a claim that the viewer personally qualifies. A funded campaign
 the viewer is not part of is not shown in their Inbox at all.
@@ -240,8 +237,8 @@ the viewer is not part of is not shown in their Inbox at all.
 
 | Situation | Behaviour | Why it does not add a state |
 | --- | --- | --- |
-| Before opening (`Funded, not yet open`) | **Settled:** settlement is refused until opening. **Proposal (Q9):** the claim is presented as `Available` with the opening time stated. | Either way this is a time-gate on the action, not a fourth state |
-| After budget exhaustion (`Exhausted`) | **Settled:** settlement is refused, this entitlement can no longer settle, and the escrow is empty until expiry, when the reclaim returns any unsettled balance under the fixed recovery rule. **Proposal (Q9):** remaining eligible identities are presented as `Expired` with fully-allocated copy. | Either way no fourth state is required; which label carries it is the open question, not the behaviour |
+| Before opening (`Funded, not yet open`) | **Settled:** settlement is refused until opening. **D-020:** the claim appears under `Available` with an explicit **Opens <date/time>** label and the relevant timezone, and claiming is disabled. | A time-gate on the action, not a fourth state |
+| After budget exhaustion (`Exhausted`) | **Settled:** settlement is refused and the escrow is empty until expiry, when the reclaim returns any unsettled balance under the fixed recovery rule. **D-020:** the deployed Core funds every listed entitlement, so an eligible unconsumed entitlement with no backing is a reconciliation/integrity error — not a normal exhausted-cap window, and never a fabricated `Expired` state. | No fourth state; the old oversubscription window no longer exists |
 | Between exhaustion and expiry | Nothing is offered; no queue, no waitlist, no partial allocation | R2/R3 forbid partial settlement |
 | After expiry, unsettled | `Expired` with the recovery statement | Terminal |
 | After reclaim | Nothing offered | Reclaim is an issuer-side fact, not a claimant state |
@@ -463,9 +460,9 @@ Depends on: Phases A and B.
   `components/GiftCard.tsx`, and `link-gift-send/README.md`.
 
 Depends on: Phases A–C for the lifecycle; the design system is already available
-(`link-gift-send/src/index.css`, `brand/approved/`). **Q9 must be resolved before the boundary
-presentation is implemented** — the settled parts (three states, settlement refused before opening and
-after exhaustion) can be built without it, but which label carries each window cannot (§3.4, §10).
+(`link-gift-send/src/index.css`, `brand/approved/`). **Q9 is resolved by D-020**: a pre-opening claim appears
+under `Available` with an explicit **Opens <date/time>** label and the relevant timezone and claiming
+disabled, and the three states are unchanged (§3.4, §10).
 
 ### Phase E — end-to-end testnet proof
 
@@ -538,7 +535,7 @@ Each item is a **Proposal**, not a settled decision, and none has been recorded 
 | Q6 | **Signer powers** — what the coordination signer may authorize | **(Resolved by D-019):** no single signer. Each settlement requires the claimant's consent plus both an independent issuer approver and the Resolver over the same signed request | Resolved | Rotation is no longer a mitigation: funded campaigns are immutable and approving keys cannot be replaced. Losing a key stops settlement until expiry but never strands recovery (R18) |
 | Q7 | **Upgradeability and migration** | **(Resolved by D-019):** an immutable contract, with no proxy and no authority or approving-key replacement | Resolved | D-019 makes funded campaigns immutable, so the rotation question is settled: custody cannot change after funding |
 | Q8 | **Early release after exhaustion** | **(Resolved by D-019 / this brief):** reclaim stays expiry-only | Resolved | D-019 fixes reclaim at expiry. With every entitlement fully funded there is no remainder, so exhaustion leaves an empty escrow and no earlier recovery path is needed |
-| Q9 | **Boundary presentation in the Inbox** — which of the three states carries a claim **before opening**, and which carries one **after an exhausted cap** | (a) `Available` with the opening time before opening, and `Expired` with fully-allocated copy after exhaustion — the proposal in §3.4; (b) the same two labels with different copy; (c) a distinct presentation for each window, which would require a product decision about R10's three states | (a) for the proof: it keeps the settled three states and needs no new surface | These labels are what a claimant reads to judge whether they can still be paid, so the mapping changes what `Available` and `Expired` mean. D-009 and the build brief settle *that* there are three states and *that* settlement is refused in both windows; they do not settle which label carries each, so it cannot enter the specification silently. Blocks Phase D's boundary presentation (§7, §12 item 12) |
+| Q9 | **Boundary presentation in the Inbox** — which of the three states carries a claim **before opening**, and which carries one **after an exhausted cap** | **(Resolved by D-020):** a funded pre-opening claim appears under `Available` with an explicit **Opens <date/time>** label and the relevant timezone, claiming disabled; the exhausted-cap window no longer exists because every listed entitlement is fully funded | Resolved | Keeps the settled three states, adds no fourth state, and reintroduces no oversubscription. Approval and transaction workflow states remain workflow statuses inside `Available` |
 
 ---
 
@@ -622,9 +619,10 @@ The V1 proof is complete only when all of the following are true and evidenced:
     **D-019 supersedes Q6**, the deployed mechanism matches that record (claimant consent plus both
     independent attestations), and the residual collusion exposure is stated in the reviewer
     documentation (§4, §6).
-12. The Inbox's boundary presentation follows a resolved **Q9** record: claims before opening and claims
-    in an exhausted campaign are presented as the architect decided, the three states are unchanged unless
-    R10 is amended by that same decision, and settlement is refused in both windows (§3.4).
+12. The Inbox's boundary presentation follows the resolved **Q9** record (**D-020**): a pre-opening claim
+    appears under `Available` with an explicit **Opens <date/time>** label and the relevant timezone and
+    claiming disabled, there is no exhausted-cap window to present, the three states are unchanged, and
+    settlement is refused in both windows (§3.4).
 
 Arc **mainnet** deployment and any real-fund spending require separate explicit approval (D-014), and
 independent review before value limits increase.
