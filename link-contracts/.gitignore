@@ -1,0 +1,11 @@
+node_modules/
+artifacts/
+cache/
+dist/
+coverage/
+typechain-types/
+
+# Never commit deployment secrets or operator-local network state.
+.env
+.env.local
+deployments/*.local.json
