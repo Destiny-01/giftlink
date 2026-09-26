@@ -189,7 +189,7 @@ export function useFundNomineCampaign() {
     async (
       prepared: PrepareCampaignResponse,
       wallet: SigningWallet
-    ): Promise<NomineCampaign | null> => {
+    ): Promise<{ campaignId: string; onchainId: string; status: string } | null> => {
       setIsLoading(true);
       setError(null);
       setStep("approving");
@@ -291,12 +291,12 @@ export function useFundNomineCampaign() {
 
         // Step 4: confirm with the backend. "funded" is only shown after this returns.
         const confirmed = await api.confirmNomineCampaign(
-          prepared.campaign.id,
+          prepared.campaignId,
           txHash
         );
 
         setStep("funded");
-        return confirmed.campaign ?? null;
+        return confirmed;
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to fund campaign");
         setStep("idle");
@@ -371,7 +371,6 @@ export function useIssuerApproval() {
 
         const typedData = buildTypedData(campaign, request);
 
-        // @ts-expect-error - viem infers domain/types; permissive in this project
         const signature: string = await signTypedDataAsync({
           domain: typedData.domain,
           types: typedData.types,

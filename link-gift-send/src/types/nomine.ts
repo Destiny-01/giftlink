@@ -90,6 +90,8 @@ export interface NomineCampaign {
 /** Public link view (spec §8 `GET /campaigns/:id/public`). No roster. */
 export interface CampaignPublicView {
   id: string;
+  /** The campaign's on-chain id, when it has been funded. */
+  onchainId?: number | null;
   issuer: string;
   /** Optional human-readable issuer label. */
   issuerName?: string | null;
@@ -123,11 +125,13 @@ export interface PrepareCampaignRequest {
 }
 
 export interface PrepareCampaignResponse {
-  campaign: NomineCampaign;
+  campaignId: string;
   config: CampaignConfigPayload;
-  count: number;
+  entitlementCount: number;
   budget: BaseUnits;
-  root: Hex;
+  entitlementRoot: Hex;
+  paramsHash: string;
+  status: CampaignStatus;
 }
 
 export interface ConfirmCampaignRequest {
@@ -135,7 +139,15 @@ export interface ConfirmCampaignRequest {
 }
 
 export interface ConfirmCampaignResponse {
-  campaign: NomineCampaign;
+  campaignId: string;
+  onchainId: string;
+  status: CampaignStatus;
+}
+
+export interface ConfirmRecoveryResponse {
+  campaignId: string;
+  status: CampaignStatus;
+  reclaimedTxHash: string;
 }
 
 export interface CampaignRequestsResponse {
@@ -151,8 +163,15 @@ export interface IssuerApprovalRequest {
   amount: BaseUnits;
   deadline: number;
   status: ClaimRequestStatus;
-  consentDigest: Hex;
+  /** Present on the issuer's request list; the backend never exposes it after approval. */
+  consentDigest?: Hex;
   requestedAt?: string;
+  /** The backend exposes presence, never the issuer's signature itself. */
+  hasIssuerApproval?: boolean;
+  submitTxHash?: string | null;
+  settlementTxHash?: string | null;
+  /** Synthesized from a verified Settlement event only; null while unsettled. */
+  receipt?: SettlementReceipt | null;
   consentSignature?: string | null;
   issuerApprovalSignature?: string | null;
 }

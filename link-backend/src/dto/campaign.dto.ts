@@ -148,6 +148,8 @@ export interface CampaignPublicViewResponse {
   budget: string;
   status: string;
   fundingStatus: "awaiting_funding" | "funded" | "reclaimed";
+  /** On-chain funding evidence for the public link: the canonical CampaignFunded tx. */
+  fundingTxHash: string | null;
   openingTime: string;
   expiryTime: string;
   usdcAddress: string;

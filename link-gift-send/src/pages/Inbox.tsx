@@ -224,7 +224,10 @@ export default function Inbox() {
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
   const { grouping, isLoading, error, refresh } = useNomineInbox({ pollMs: 30000 });
   const { signConsent, buildTypedData, isSigning } = useClaimConsent();
-  const { settle, isSettling, step: settleStep } = useSettleClaim();
+  const { settle, step: settleStep } = useSettleClaim();
+  /** Only these two steps are in flight; "settled" and "failed" are terminal. */
+  const isSettling =
+    settleStep === "submitting" || settleStep === "awaiting_confirmation";
 
   const {
     wallets: walletBalances,

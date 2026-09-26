@@ -84,24 +84,28 @@ export function useClaimConsent() {
         const built = buildTypedData(input);
         const { typedData } = built;
 
+        // Both signing libraries type their arguments more narrowly than the shared
+        // SignableTypedData (viem permits a bigint chainId, Privy wants mutable type
+        // arrays). The payload is the same EIP-712 object the contract hashes either way,
+        // so a single cast here keeps the two signing paths provably aligned.
+        const typedDataArgs = {
+          domain: typedData.domain,
+          types: typedData.types,
+          primaryType: typedData.primaryType,
+          message: typedData.message,
+        };
+
         let signature: string;
         if (input.wallet.walletType === "privy") {
-          // @ts-expect-error - Privy returns the signature string for the embedded wallet
-          signature = await privySignTypedData({
-            domain: typedData.domain,
-            types: typedData.types,
-            primaryType: typedData.primaryType,
-            message: typedData.message,
-          });
+          const privyResult = await privySignTypedData(
+            typedDataArgs as unknown as Parameters<typeof privySignTypedData>[0]
+          );
+          signature = privyResult.signature;
         } else {
-          // @ts-expect-error - viem infers domain/types; permissive in this project
           signature = await signTypedDataAsync({
-            domain: typedData.domain,
-            types: typedData.types,
-            primaryType: typedData.primaryType,
-            message: typedData.message,
+            ...typedDataArgs,
             account: input.wallet.address,
-          });
+          } as unknown as Parameters<typeof signTypedDataAsync>[0]);
         }
 
         if (!signature) {

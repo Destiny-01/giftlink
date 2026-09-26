@@ -245,7 +245,15 @@ export function claimRequestDigest(
     domain: domain ?? getClaimCoreDomain(),
     types: CLAIM_REQUEST_TYPES,
     primaryType: "ClaimRequest",
-    message: request as unknown as Record<string, unknown>,
+    // viem requires real bigints for uint256/uint64; the view model carries them as
+    // strings or numbers, so normalize here rather than letting viem reject the payload.
+    message: {
+      campaignId: BigInt(request.campaignId),
+      entitlementId: request.entitlementId,
+      wallet: request.wallet,
+      amount: BigInt(request.amount),
+      deadline: BigInt(request.deadline),
+    },
   });
 }
 
@@ -257,7 +265,14 @@ export function approvalDigest(
     domain: domain ?? getClaimCoreDomain(),
     types: APPROVAL_TYPES,
     primaryType: "Approval",
-    message: approval as unknown as Record<string, unknown>,
+    message: {
+      campaignId: BigInt(approval.campaignId),
+      entitlementId: approval.entitlementId,
+      wallet: approval.wallet,
+      amount: BigInt(approval.amount),
+      deadline: BigInt(approval.deadline),
+      consentDigest: approval.consentDigest,
+    },
   });
 }
 

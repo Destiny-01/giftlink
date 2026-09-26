@@ -277,13 +277,13 @@ export default function Studio() {
 
             <div className="space-y-2">
               <NomineFactRow label="Allocation per recipient" value={formatUsdcDisplay(prepared.config.allocation)} mono />
-              <NomineFactRow label="Exact recipient count" value={prepared.count} />
+              <NomineFactRow label="Exact recipient count" value={prepared.entitlementCount} />
               <NomineFactRow label="Total funding requirement" value={formatUsdcDisplay(prepared.budget)} mono />
               <NomineFactRow label="Opens" value={formatTimestampWithTimezone(prepared.config.openingTime)} />
               <NomineFactRow label="Expires" value={formatTimestampWithTimezone(prepared.config.expiryTime)} />
               <NomineFactRow label="Issuer-approval address" value={prepared.config.issuerApprover} mono />
               <NomineFactRow label="Resolver address" value={prepared.config.resolver} mono />
-              <NomineFactRow label="Entitlement root" value={prepared.root} mono />
+              <NomineFactRow label="Entitlement root" value={prepared.entitlementRoot} mono />
               <NomineFactRow label="Chain" value={CLAIM_CORE_CHAIN_ID} />
             </div>
 

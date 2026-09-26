@@ -301,24 +301,59 @@ export async function settleClaim(
     request.entitlementId
   );
 
-  // Take the submission slot. A settled request can never be re-submitted; anything else may
-  // proceed, and the contract refuses a genuine double settlement.
-  const claim = await prisma.claimRequest.updateMany({
-    where: { id: request.id, status: { not: ClaimRequestStatus.SETTLED } },
-    data: {
-      status: ClaimRequestStatus.SUBMITTED,
-      resolverSignature,
-      updatedAt: new Date(),
-    },
-  });
+  // Take the submission slot. Only a request that is *not* already in flight may take it, so
+  // two concurrent tabs cannot both broadcast: a `SUBMITTED` row is a held slot, not a free
+  // one. The contract's consumption check still backstops the race either way.
+  const takeSlot = () =>
+    prisma.claimRequest.updateMany({
+      where: {
+        id: request.id,
+        status: {
+          in: [
+            ClaimRequestStatus.CONSENTED,
+            ClaimRequestStatus.ISSUER_APPROVED,
+            ClaimRequestStatus.FAILED,
+          ],
+        },
+      },
+      data: {
+        status: ClaimRequestStatus.SUBMITTED,
+        resolverSignature,
+        updatedAt: new Date(),
+      },
+    });
+
+  let claim = await takeSlot();
   if (claim.count === 0) {
     const current = await prisma.claimRequest.findUnique({ where: { id: request.id } });
+
     if (current?.status === ClaimRequestStatus.SETTLED && current.settlementTxHash) {
       return mapRequestReceipt(current);
     }
-    throw new ServiceUnavailableError(
-      "A settlement attempt for this request is already in progress."
-    );
+
+    if (current?.status === ClaimRequestStatus.SUBMITTED) {
+      // A previous attempt may have died mid-flight. If it did not settle on-chain the slot
+      // is stale, so demote it once and retry: a crash must not wedge the request forever.
+      const reconciled = await reconcileSubmission(campaign, current);
+      if (reconciled) {
+        return reconciled;
+      }
+      await prisma.claimRequest.updateMany({
+        where: {
+          id: request.id,
+          status: ClaimRequestStatus.SUBMITTED,
+          settlementTxHash: null,
+        },
+        data: { status: ClaimRequestStatus.FAILED, updatedAt: new Date() },
+      });
+      claim = await takeSlot();
+    }
+
+    if (claim.count === 0) {
+      throw new ServiceUnavailableError(
+        "A settlement attempt for this request is already in progress."
+      );
+    }
   }
 
   const contract = new Contract(

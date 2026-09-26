@@ -539,6 +539,7 @@ export function campaignPublicView(
     | "status"
     | "openingTime"
     | "expiryTime"
+    | "fundingTxHash"
   >
 ): CampaignPublicViewResponse {
   const fundingStatus =
@@ -561,6 +562,7 @@ export function campaignPublicView(
     budget: campaignBudget(campaign.allocation, campaign.entitlementCount),
     status: campaign.status,
     fundingStatus,
+    fundingTxHash: campaign.fundingTxHash,
     openingTime: campaign.openingTime.toISOString(),
     expiryTime: campaign.expiryTime.toISOString(),
     usdcAddress: env.USDC_CONTRACT_ADDRESS.toLowerCase(),
@@ -655,6 +657,8 @@ export async function listCampaignRequests(
       status: request.status,
       consentDigest: request.consentDigest,
       hasIssuerApproval: request.issuerApprovalSignature !== null,
+      submitTxHash: request.submitTxHash,
+      settlementTxHash: request.settlementTxHash,
       createdAt: request.createdAt.toISOString(),
     })),
   };
@@ -677,6 +681,7 @@ export async function getPublicCampaign(campaignId: string) {
       status: true,
       openingTime: true,
       expiryTime: true,
+      fundingTxHash: true,
     },
   });
   if (!campaign) {
