@@ -1,0 +1,17 @@
+{
+  "contract": "NomineClaimCore",
+  "network": "testnet",
+  "chainId": 5042002,
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "address": "0x9D390dCa06118302C8194CC214Ed9BC7f5969810",
+  "deploymentTx": "0xba4d60f953ea8d099dd2903ff29f86d2a531fbee81bf712fdc801db6d5183338",
+  "deployer": "0xe3C71da511A74b18ac41d4E19308aeEE980b98E1",
+  "compiler": "0.8.24+commit.e11b9ed9",
+  "viaIR": true,
+  "optimizerRuns": 200,
+  "evmVersion": "cancun",
+  "sourceCommit": "fcfd71c3946d00f7a4a798def4d03a8eefff248a",
+  "recordedAt": "2026-09-26T13:59:22.507Z",
+  "explorer": "https://explorer.testnet.arc.io/address/0x9D390dCa06118302C8194CC214Ed9BC7f5969810",
+  "sourceVerified": true
+}

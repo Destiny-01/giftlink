@@ -179,15 +179,9 @@ Compilation targets the **Cancun** EVM version because OpenZeppelin 5 compiles C
 opcodes. The target runtime must expose them; confirm this against Arc's EVM reference before
 the first broadcast, and downgrade OpenZeppelin to 4.x if it does not.
 
-### Testnet deployment status — blocked
+### Testnet deployment status — verified
 
-No contract has been deployed to Arc testnet from this branch. The preflight stops
-for a concrete reason: this environment has no `ARC_TESTNET_RPC_URL` and no funded
-`DEPLOYER_PRIVATE_KEY`, and the acceptance criteria forbid inventing either. The
-deployment path, preflight, and record format are complete and reproducible; running
-the commands above with real testnet credentials produces
-`deployments/arc-testnet.json` and the explorer links. Until then no address,
-transaction hash, or verified contract is claimed.
+The approved Claim Core was deployed and source-verified on Arc testnet (chain 5042002). Live funding, sponsored settlement, rejected-claim checks, expiry recovery and event accounting passed. See [deployment record](deployments/arc-testnet.json) and [runtime proof](deployments/arc-testnet-runtime.md) for addresses, transactions and the explicit simulated-authority limitation. This is not approval for mainnet or a completed independent-issuer pilot.
 
 ## Out of scope
 
