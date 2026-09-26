@@ -254,6 +254,13 @@ async function findCampaignForEvent(event: ClaimEvent) {
  * locally, and its entitlements could never settle. Matching is on the *immutable committed
  * configuration* the event carries, and is accepted only when exactly one draft matches, so a
  * coincidental partial match cannot attach funds to a different roster.
+ *
+ * The funder is deliberately **not** part of the query: `confirmCampaignFunding` accepts funding from
+ * any wallet linked to the issuer's account, while the draft stores the wallet that was linked at
+ * prepare time, so filtering on it would silently skip exactly the lost-confirmation cases this
+ * exists for. Legitimacy is checked after the match instead, using the same rule confirm uses - the
+ * funder is the prepare-time wallet or the owner's recorded wallet - and a mismatch is logged rather
+ * than bound.
  */
 async function bindUnboundDraft(event: ClaimEvent) {
   const metadata = (event.metadata ?? {}) as Record<string, unknown>;
@@ -285,13 +292,17 @@ async function bindUnboundDraft(event: ClaimEvent) {
       contractAddress: event.contractAddress,
       onchainId: null,
       status: CampaignStatus.DRAFT,
-      issuerAddress: issuer,
       issuerApproverAddress: issuerApprover,
       resolverAddress: resolver,
       allocation,
       entitlementCount,
     },
-    select: { id: true, entitlements: { select: { entitlementId: true } } },
+    select: {
+      id: true,
+      issuerAddress: true,
+      issuerPrivyId: true,
+      entitlements: { select: { entitlementId: true } },
+    },
     take: 2,
   });
 
@@ -299,14 +310,35 @@ async function bindUnboundDraft(event: ClaimEvent) {
     return null;
   }
 
-  // The commitment binds the funded roster to the prepared roster: the five scalar matches alone
-  // could still describe different entitlement identifiers.
+  // The commitment binds the funded roster to the prepared roster: the scalar matches alone could
+  // still describe different entitlement identifiers.
   const candidate = candidates[0];
   const identifiers = candidate.entitlements.map((item) => item.entitlementId);
   if (identifiers.length !== entitlementCount) {
     return null;
   }
   if (computeEntitlementRoot(identifiers).toLowerCase() !== committedRoot) {
+    return null;
+  }
+
+  const owner = await prisma.user.findUnique({
+    where: { privyId: candidate.issuerPrivyId },
+    select: { walletAddress: true },
+  });
+  const funderIsOwner =
+    issuer === candidate.issuerAddress.toLowerCase() ||
+    (owner?.walletAddress !== null &&
+      owner?.walletAddress !== undefined &&
+      issuer === owner.walletAddress.toLowerCase());
+
+  if (!funderIsOwner) {
+    logger.warn({
+      operation: "bindUnboundDraft",
+      outcome: "funder_mismatch",
+      campaignId: candidate.id,
+      onchainCampaignId: event.onchainCampaignId.toString(),
+      funder: issuer,
+    });
     return null;
   }
 
@@ -358,11 +390,14 @@ async function replaySettlement(event: ClaimEvent): Promise<number> {
   });
 
   // The chain is authoritative for settlement, so the workflow request converges even if it
-  // never observed the relay's own response.
+  // never observed the relay's own response. The wallet must match: since a request can now be
+  // renewed with a new payout wallet, a settlement that paid the previous wallet must not be
+  // presented as a completed claim for the current one.
   await prisma.claimRequest.updateMany({
     where: {
       campaignId: campaign.id,
       entitlementId: event.entitlementId,
+      walletAddress: event.walletAddress,
       status: { not: ClaimRequestStatus.SETTLED },
     },
     data: {

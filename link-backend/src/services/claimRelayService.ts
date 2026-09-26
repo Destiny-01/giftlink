@@ -315,6 +315,10 @@ export async function settleClaim(
     prisma.claimRequest.updateMany({
       where: {
         id: request.id,
+        // Bind the slot to the exact consent that was verified above. A renewal replaces the digest,
+        // so an attempt that validated the previous consent cannot then broadcast it against the
+        // renewed row.
+        consentDigest: request.consentDigest,
         status: {
           in: [
             ClaimRequestStatus.CONSENTED,
@@ -445,10 +449,14 @@ export async function settleClaim(
     }
 
     await prisma.claimRequest.updateMany({
-      where: { id: request.id },
+      // Scoped to this attempt, like every other write on the row: a superseded attempt whose
+      // broadcast only fails later must not flip a newer attempt's live `SUBMITTED` row to FAILED,
+      // which would let a third caller take the slot and broadcast alongside it.
+      where: { id: request.id, submitAttemptId: attemptId },
       data: {
         status: ClaimRequestStatus.FAILED,
         failureReason: "settle_reverted",
+        submitAttemptId: null,
         updatedAt: new Date(),
       },
     });

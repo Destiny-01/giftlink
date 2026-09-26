@@ -33,7 +33,14 @@ const envSchema = z.object({
   FRONTEND_URL: z.string().url(),
   EIP712_DOMAIN_NAME: z.string().default("GiftLinkPermit"),
   EIP712_VERSION: z.string().default("1"),
-  ENABLE_EVENT_LISTENER: z.coerce.boolean().default(true),
+  /**
+   * `z.coerce.boolean()` maps any non-empty string - including "false" and "0" - to true, which
+   * would make this switch impossible to turn off. Parse the literal, as PRISMA_QUERY_LOG does.
+   */
+  ENABLE_EVENT_LISTENER: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
   /**
    * Prisma's query log includes bound parameters, so it prints raw emails, handles and
    * provider ids. Off unless asked for; see the logger note in config/prisma.ts.
