@@ -34,8 +34,10 @@ These are different interfaces over the same Claim lifecycle rather than separat
 - Claims are fully funded before they become available.
 - The issuer, amount, funding status, eligibility source, settlement outcome, expiry, and recovery rule are visible to the claimant.
 - Eligibility may be proven on-chain or attested by a named trusted Resolver. The product makes that trust source explicit.
-- A claimant authenticates, connects or creates a wallet, proves eligibility, and settles to that wallet.
-- Each entitlement can settle only once. Authorizations cannot be replayed or redirected to another wallet.
+- A claimant authenticates, connects or creates a wallet, signs the exact payout they are requesting, and settles to that wallet.
+- Each entitlement can settle only once. The claimant's signed request and both independent attestations bind the campaign, entitlement, wallet, amount, chain, contract, and deadline, so a request cannot be replayed or redirected to another wallet.
+- Settlement requires the claimant's consent plus **both** an independent issuer attestation and a Nomine Resolver attestation over that exact signed request. Neither authority alone, and no relayer, can settle a Claim or choose the payout wallet.
+- A funded campaign's rules are immutable: no upgrades, authority or approving-key replacement, eligibility edits, or changes to allocation, times, or recovery destination, and no early withdrawal.
 - Claimants do not need to manually acquire a separate gas token to complete the normal claim experience.
 - Expired, unused value returns only according to the recovery rule fixed for the Claim.
 - On-chain state and events are authoritative for funding, settlement, and recovery. Off-chain data supports identity, eligibility workflows, indexing, notifications, and presentation.
@@ -45,7 +47,9 @@ These are different interfaces over the same Claim lifecycle rather than separat
 
 The protocol minimizes custody trust while stating Gate trust honestly.
 
-Active escrow cannot be swept or redirected by an administrator, Resolver, or relayer. Funding conservation, settlement uniqueness, expiry, and recovery are enforced on-chain.
+Active escrow cannot be swept or redirected. No owner, administrator, Resolver, relayer, or single approver can consume or alter an approved payout, and funded campaigns are immutable. Funding conservation, settlement uniqueness, expiry, and recovery are enforced on-chain; unused funds after expiry are returned under the recovery rule fixed at funding, without requiring claimant consent or either Gate attestation.
+
+The contract cannot prove ownership of an off-chain identity. Wallet consent proves control of the wallet, not ownership of the identity behind an entitlement, and a fixed eligibility commitment does not eliminate that. Collusion between the two Gate authorities remains an explicit Gate-trust risk: they could assign an unused entitlement to a wallet they control and sign as that wallet. The product discloses this rather than presenting attested facts as trustless. The issuer approval key is held outside Nomine, and the issuer independently verifies the identity-to-wallet assignment through a known channel.
 
 Some eligibility facts originate outside the blockchain. The system does not present those facts as trustless; it identifies the Resolver or issuer responsible for them and enforces the resulting authorization consistently.
 
@@ -55,13 +59,15 @@ Raw email addresses, social identifiers, secrets, and private eligibility data a
 
 The current release is an Arc-native proof of the core issuer-to-claimant loop:
 
-- A fixed-allocation community campaign funded with USDC on Arc.
-- One clearly declared, Resolver-backed eligibility source.
+- A fixed-allocation community campaign funded with USDC on Arc, where every listed entitlement is fully backed by its own allocation and there is no eligible-list oversubscription.
+- One clearly declared, Resolver-backed eligibility source, fixed at funding.
 - A single-use authorization for each eligible claimant.
+- Dual attestation: the claimant signs the payout, then an independently held issuer approval and a Nomine Resolver approval attest that exact signed request.
+- Immutable funded rules: allocation, entitlement commitment, approving authorities, opening time, expiry, and recovery destination cannot change after funding.
 - Direct USDC settlement only.
-- Opening time, expiry, and deterministic issuer reclaim.
+- Opening time, expiry, and deterministic issuer reclaim that requires neither Gate attestation nor claimant consent.
 - An issuer view of funded, settled, remaining, and reclaimed value.
-- A claimant experience with **Available**, **Completed**, and **Expired** inbox states.
+- A claimant experience with **Available**, **Completed**, and **Expired** inbox states, plus an **Awaiting issuer confirmation** workflow status while an approval is pending.
 - Arc transaction receipts and explorer visibility.
 
 The current release does not include swaps, liquidity positions, arbitrary settlement callbacks, milestone programs, streams, cross-chain settlement, open Resolver or solver markets, agent-issued Claims, or a protocol token.
@@ -79,9 +85,9 @@ The current release does not include swaps, liquidity positions, arbitrary settl
 
 1. A claimant opens the Claim and sees the issuer, amount, funding status, Gate, expiry, and settlement outcome.
 2. The claimant authenticates and connects or creates a wallet.
-3. The Resolver verifies the declared eligibility condition.
-4. The claimant receives a single-use authorization bound to the Claim and their wallet.
-5. The Claim settles USDC on Arc.
+3. The interface discloses the confirmation requirement, and the claimant signs the exact payout — campaign, entitlement, their selected wallet, amount, chain, contract, and deadline.
+4. The Resolver verifies the declared eligibility condition and the issuer independently verifies the identity-to-wallet assignment through a known channel. Both then attest the same signed request. While an approval is pending, the inbox shows **Awaiting issuer confirmation** — a workflow status, not a settled receipt; expiry still applies while it is pending.
+5. A sponsored transaction settles USDC on Arc once the claimant's consent and both attestations are present.
 6. The claimant receives an on-chain receipt and the inbox records the Claim as completed.
 
 ### Expire and recover
