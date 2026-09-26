@@ -24,7 +24,9 @@ Funding and settlement guarantees are enforced on-chain. Eligibility may depend 
 
 ## D-006 — Active escrow cannot be confiscated or redirected
 
-No owner, administrator, Resolver, or relayer may sweep active Claim funds or redirect settlement away from the authorized claimant. Unused funds can move only through the recovery rule established for the Claim.
+No owner or administrator may sweep active Claim escrow. No single approver or relayer can consume or redirect a Claim, and an approved payout cannot be altered. Settlement requires the claimant's signed wallet selection and both independent Gate attestations over that exact payout. Unused funds can move only through the recovery rule established for the Claim.
+
+The contract cannot independently prove ownership of an off-chain identity. Collusion between both Gate authorities remains an explicit Gate-trust risk: they could falsely assign an unconsumed entitlement to a wallet they control and obtain that wallet's signature. Wallet consent proves wallet control, not identity ownership. These limits must be disclosed rather than described as trustless identity verification.
 
 ## D-007 — Claim authorizations are single-use and domain-bound
 
@@ -77,3 +79,17 @@ Nomine is developed as a distinct Claim Layer product within the existing reposi
 The first work package is a foundation audit and implementation brief: map the existing flows, identify what to retain, repair, or replace, and define the campaign lifecycle and acceptance criteria before implementation. Material product and architectural choices are resolved with the product architect; implementation mechanics belong to the implementation agent.
 
 The approved Nomine identity may be applied to the new product flow without making a complete GiftLink makeover a prerequisite or expanding V1. GiftLink remains a focused application, GiftLink by Nomine; migration of legacy records, links, and custody requires an explicit plan and is not implied by a name change.
+
+## D-019 — V1 requires independent issuer and Resolver attestations
+
+Approved September 26, 2026. Each V1 settlement requires both the campaign's issuer and Nomine Resolver to attest the same payout after the claimant signs their selected wallet. The claimant request and both domain-separated attestations bind the exact campaign, entitlement, wallet, amount, chain ID, verifying contract, and deadline. Neither approver nor the relayer can substitute another wallet into that signed payout. The contract must verify wallet consent and both distinct approving authorities; a signature from either authority alone is insufficient.
+
+The issuer key remains outside Nomine's infrastructure and control. The issuer independently verifies the identity-to-wallet assignment through a known channel, rather than blindly approving information presented by Nomine. Two keys under Nomine's control do not satisfy this decision. Manual issuer confirmation is limited to the first controlled pilot and is not the intended long-term claimant experience; a later replacement requires an explicit design decision preserving the trust boundary.
+
+The claimant interface must disclose the confirmation requirement before requesting consent and display **Awaiting issuer confirmation** while it is pending. This is a workflow status within the V1 inbox experience, not evidence that a Claim has settled. Expiry still applies while confirmation is pending.
+
+Each listed entitlement is fully funded for the fixed USDC allocation, single-use, and represented by a high-entropy, campaign-specific identifier. Funding fixes a commitment covering the actual entitlement identifiers, and settlement proves membership and consumes that identifier. No raw identity data appears on-chain or in events. The same entitlement cannot be consumed again with another wallet, signature, or deadline. Membership does not independently prove off-chain identity ownership.
+
+Funded campaigns are immutable: no upgrades, approving-key replacement, eligibility changes, or early withdrawal. Allocation, membership commitment, approving authorities, opening time, expiry, and recovery destination are fixed at funding. Unused funds remain recoverable only after expiry under that fixed rule, without requiring claimant consent or either Gate attestation. Losing an approving key can prevent settlement until expiry; it must not prevent expiry recovery. The pilot uses the issuer address as the fixed recovery destination. Relay sponsorship is funded separately and does not reduce the promised allocation.
+
+Required verification includes either signer acting alone, missing or invalid claimant consent, replay across payout contexts, wallet substitution, fabricated membership, expired approvals, double settlement, timing boundaries, full funding and conservation, prohibited campaign mutations, and expiry recovery when either approver is unavailable. Collusion between both Gate authorities remains the explicit risk described in D-006, not a guarantee that tests can establish away.
