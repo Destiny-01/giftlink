@@ -9,11 +9,9 @@
 
 import {
   encodeFunctionData,
-  formatUnits,
   hashTypedData,
   isAddress,
   keccak256,
-  parseUnits,
   concat,
   zeroAddress,
   type TypedDataDomain,
@@ -35,7 +33,9 @@ export const CLAIM_CORE_EXPLORER_URL =
   (import.meta.env.VITE_ARC_EXPLORER_URL as string) ||
   "https://explorer.testnet.arc.io";
 
-export const USDC_DECIMALS = 6;
+// USDC_DECIMALS and the amount/timestamp formatters live in `./format`, which is free of
+// `import.meta.env` and project aliases so a plain runtime test can execute them. They are
+// re-exported below, so existing importers of this module keep working unchanged.
 
 /** Arc testnet USDC ERC-20 interface (spec §1). */
 export const USDC_ADDRESS = ((import.meta.env.VITE_USDC_CONTRACT_ADDRESS as string) ||
@@ -475,49 +475,13 @@ export function encodeReclaimData(campaignId: bigint | number | string): `0x${st
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-export function usdcToBaseUnits(amount: string | number): bigint {
-  return parseUnits(String(amount), USDC_DECIMALS);
-}
-
-export function formatUsdc(baseUnits: bigint | number | string | null | undefined): string {
-  if (baseUnits === null || baseUnits === undefined) return "0";
-  try {
-    return formatUnits(BigInt(baseUnits), USDC_DECIMALS);
-  } catch {
-    return String(baseUnits);
-  }
-}
-
-export function formatUsdcDisplay(
-  baseUnits: bigint | number | string | null | undefined
-): string {
-  return `${formatUsdc(baseUnits)} USDC`;
-}
-
-/**
- * Format an absolute unix-seconds timestamp explicitly showing the timezone, so a deadline can
- * never be read as local time by mistake.
- */
-export function formatTimestampWithTimezone(ts?: number | null): string {
-  if (ts === null || ts === undefined) return "—";
-  const date = new Date(Number(ts) * 1000);
-  if (Number.isNaN(date.getTime())) return "—";
-
-  const local = new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZoneName: "short",
-  }).format(date);
-
-  const offsetMinutes = -date.getTimezoneOffset();
-  const sign = offsetMinutes >= 0 ? "+" : "-";
-  const abs = Math.abs(offsetMinutes);
-  const offset = `UTC${sign}${String(Math.floor(abs / 60)).padStart(2, "0")}:${String(
-    abs % 60
-  ).padStart(2, "0")}`;
-
-  return `${local} (${offset})`;
-}
+export {
+  USDC_DECIMALS,
+  usdcToBaseUnits,
+  formatUsdc,
+  formatUsdcDisplay,
+  formatTimestampWithTimezone,
+} from "./format";
 
 export function explorerTxUrl(txHash?: string | null): string | null {
   if (!txHash) return null;

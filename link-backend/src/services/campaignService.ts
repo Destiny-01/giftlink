@@ -34,10 +34,10 @@ import {
 } from "./claimCoreEvidence";
 import type {
   CampaignAccountingResponse,
-  CampaignConfigPayloadResponse,
   CampaignPublicViewResponse,
   InboxEntryResponse,
   PrepareCampaignRequest,
+  PrepareCampaignResponse,
 } from "../dto/campaign.dto";
 
 /**
@@ -75,15 +75,7 @@ function requirePrivyId(authUser?: AuthenticatedUser): string {
 export async function prepareCampaign(
   input: PrepareCampaignRequest,
   authUser?: AuthenticatedUser
-): Promise<{
-  campaignId: string;
-  config: CampaignConfigPayloadResponse;
-  entitlementCount: number;
-  budget: string;
-  entitlementRoot: string;
-  paramsHash: string;
-  status: string;
-}> {
+): Promise<PrepareCampaignResponse> {
   const issuerPrivyId = requirePrivyId(authUser);
 
   const issuerAddress = authUser?.walletAddresses?.[0]?.toLowerCase();
@@ -123,8 +115,9 @@ export async function prepareCampaign(
     throw new ValidationError("expiryTime must be in the future");
   }
 
-  // Normalize + dedup by hash, then assign one identifier per distinct recipient.
-  const assigned = new Map<string, string>();
+  // Normalize + dedup by hash, then assign one identifier per distinct recipient. The normalized
+  // address is held in memory only to build the issuer's private export below; it is never stored.
+  const assigned = new Map<string, { entitlementId: string; email: string }>();
   for (const raw of input.emails) {
     const normalized = normalizeVerifiedEmail(raw);
     if (!normalized) {
@@ -132,15 +125,15 @@ export async function prepareCampaign(
     }
     const emailHash = emailHashFromNormalized(normalized);
     if (!assigned.has(emailHash)) {
-      assigned.set(emailHash, generateEntitlementId());
+      assigned.set(emailHash, { entitlementId: generateEntitlementId(), email: normalized });
     }
   }
   if (assigned.size === 0) {
     throw new ValidationError("At least one recipient email is required");
   }
 
-  const entitlements = [...assigned.entries()].map(([emailHash, entitlementId]) => ({
-    entitlementId,
+  const entitlements = [...assigned.entries()].map(([emailHash, entry]) => ({
+    entitlementId: entry.entitlementId,
     emailHash,
   }));
 
@@ -204,6 +197,13 @@ export async function prepareCampaign(
     entitlementRoot: root,
     paramsHash,
     status: CampaignStatus.DRAFT,
+    // Returned once, to the authenticated issuer, and never persisted or logged here: the issuer
+    // must retain this recipient-to-entitlement mapping outside Nomine so that it can verify a
+    // wallet assignment independently later (issue #13 §3). Nomine keeps only the salted hash.
+    mapping: [...assigned.values()].map((entry) => ({
+      entitlementId: entry.entitlementId,
+      email: entry.email,
+    })),
   };
 }
 

@@ -132,6 +132,11 @@ export interface PrepareCampaignResponse {
   entitlementRoot: Hex;
   paramsHash: string;
   status: CampaignStatus;
+  /**
+   * The issuer's own recipient record, returned once at prepare time. Nomine keeps only the salted
+   * hash, so the issuer must retain this to verify a wallet assignment independently later.
+   */
+  mapping: Array<{ entitlementId: Hex; email: string }>;
 }
 
 export interface ConfirmCampaignRequest {

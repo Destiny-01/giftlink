@@ -210,6 +210,9 @@ model ClaimRequest {
   issuerApprovalSignature String?
   resolverSignature       String?
   submitTxHash            String?
+  /// Lease owner of the current relay attempt. Only the owner may complete or fail the row,
+  /// so a superseded attempt cannot overwrite a newer one's result.
+  submitAttemptId         String?
   settlementTxHash        String?
   failureReason           String?
   createdAt               DateTime           @default(now())

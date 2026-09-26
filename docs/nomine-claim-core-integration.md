@@ -181,3 +181,28 @@ Private (backend only, never exposed or committed): `RPC_URL` with credentials, 
 
 Secrets live in the environment, never in the repository. The Resolver key is held by Nomine; the issuer
 approval key is the issuer's and is never requested, uploaded, stored or available to Nomine.
+
+## 11. Operational rules the workflow depends on
+
+- **The issuer holds the recipient mapping.** Nomine stores only a salted hash of each address, so it
+  cannot tell the issuer who an approval request belongs to. `POST /campaigns/prepare` therefore returns a
+  one-time `mapping` of `{ entitlementId, email }` to the authenticated issuer, which the Studio retains
+  locally and offers as a CSV download. That record belongs to the issuer: it is never persisted
+  server-side and never logged. Verifying an identity-to-wallet assignment independently means matching an
+  approval request against that record through a channel the issuer already trusts.
+- **A consent is replaced only when it can no longer settle.** The contract refuses a settlement when
+  `now > deadline`, so at exactly `deadline` the standing signature is still live and must not be
+  discarded. A request may be renewed only once it is past its deadline, is not `SUBMITTED` and is not
+  `SETTLED`, and only atomically against the exact row that was read.
+- **Consumption is reconciled first.** A settled entitlement never accepts a new consent: on-chain
+  consumption wins over any local request row.
+- **One broadcast per request.** A `SUBMITTED` row is a held lease owned by the attempt that took it, and
+  only that attempt may complete or fail it. An abandoned attempt is reclaimed only after the lease ages
+  out *and* the chain shows no settlement for it, so two tabs cannot both broadcast.
+- **Funding is reconciled before it is repeated.** The Studio records the funding transaction hash before
+  polling for its receipt, and a retry confirms that transaction rather than creating another. Because the
+  roster is immutable, a second `createCampaign` would escrow a second, unbound campaign.
+- **The indexer runs at runtime.** A scheduled, checkpointed pass scans `CampaignFunded`, `Settlement` and
+  `CampaignReclaimed`, dedupes by `(txHash, logIndex)` and replays into local state. A funding event whose
+  confirmation was lost binds its prepared draft by matching the committed configuration *and* the
+  entitlement commitment, and only when exactly one draft matches.

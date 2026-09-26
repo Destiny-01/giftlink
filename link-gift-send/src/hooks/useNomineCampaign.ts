@@ -20,6 +20,11 @@ import { encodeFunctionData, parseEventLogs } from "viem";
 import * as api from "@/services/api";
 import { claimCoreAbi } from "@/lib/claimCoreAbi";
 import {
+  clearPendingFunding,
+  readPendingFunding,
+  recordPendingFunding,
+} from "@/lib/pendingFunding";
+import {
   assertCampaignContract,
   assertClaimCoreChain,
   buildApprovalMessage,
@@ -213,73 +218,96 @@ export function useFundNomineCampaign() {
           entitlementIds: config.entitlementIds,
         };
 
-        // Step 1: approve USDC to the Claim Core for the full budget.
-        // @ts-expect-error - wagmi types require authorizationList but it is optional at runtime
-        const allowance: bigint = await publicClient.readContract({
-          address: USDC_ADDRESS,
-          abi: ERC20_ABI,
-          functionName: "allowance",
-          args: [wallet.address, cfg.address],
-        });
+        // Reconcile a previously broadcast funding transaction before creating anything. The roster
+        // is immutable, so a second createCampaign would escrow a second campaign that this draft
+        // could never bind, leaving that allocation reachable only by a manual reclaim.
+        const previouslyBroadcast = readPendingFunding(prepared.campaignId)?.txHash as
+          | `0x${string}`
+          | undefined;
 
-        if (allowance < budget) {
-          if (wallet.walletType === "external") {
-            // @ts-expect-error - wagmi infers chain and account from context
-            const approveHash = await writeContractAsync({
-              address: USDC_ADDRESS,
-              abi: ERC20_ABI,
-              functionName: "approve",
-              args: [cfg.address, budget],
-            });
-            const approvalReceipt = await publicClient.waitForTransactionReceipt({
-              hash: approveHash,
-            });
-            if (approvalReceipt.status === "reverted") {
-              throw new Error("USDC approval failed");
-            }
-          } else {
-            if (!sendTransaction) throw new Error("sendTransaction not available");
-            const approveData = encodeFunctionData({
-              abi: ERC20_ABI,
-              functionName: "approve",
-              args: [cfg.address, budget],
-            });
-            const approveTx = await sendTransaction({
-              to: USDC_ADDRESS,
-              data: approveData,
-            });
-            const approvalReceipt = await publicClient.waitForTransactionReceipt({
-              hash: approveTx.hash as `0x${string}`,
-            });
-            if (approvalReceipt.status === "reverted") {
-              throw new Error("USDC approval failed");
-            }
-          }
-        }
-
-        // Step 2: createCampaign(config).
-        setStep("creating");
         let txHash: `0x${string}`;
 
-        if (wallet.walletType === "external") {
-          // @ts-expect-error - wagmi infers chain and account from context
-          txHash = await writeContractAsync({
-            address: cfg.address,
-            abi: claimCoreAbi,
-            functionName: "createCampaign",
-            args: [struct],
-          });
+        if (previouslyBroadcast) {
+          txHash = previouslyBroadcast;
+          setStep("confirming");
         } else {
-          if (!sendTransaction) throw new Error("sendTransaction not available");
-          const data = encodeCreateCampaignData(struct);
-          const tx = await sendTransaction({ to: cfg.address, data });
-          txHash = tx.hash as `0x${string}`;
+          // Step 1: approve USDC to the Claim Core for the full budget.
+          // @ts-expect-error - wagmi types require authorizationList but it is optional at runtime
+          const allowance: bigint = await publicClient.readContract({
+            address: USDC_ADDRESS,
+            abi: ERC20_ABI,
+            functionName: "allowance",
+            args: [wallet.address, cfg.address],
+          });
+
+          if (allowance < budget) {
+            if (wallet.walletType === "external") {
+              // @ts-expect-error - wagmi infers chain and account from context
+              const approveHash = await writeContractAsync({
+                address: USDC_ADDRESS,
+                abi: ERC20_ABI,
+                functionName: "approve",
+                args: [cfg.address, budget],
+              });
+              const approvalReceipt = await publicClient.waitForTransactionReceipt({
+                hash: approveHash,
+              });
+              if (approvalReceipt.status === "reverted") {
+                throw new Error("USDC approval failed");
+              }
+            } else {
+              if (!sendTransaction) throw new Error("sendTransaction not available");
+              const approveData = encodeFunctionData({
+                abi: ERC20_ABI,
+                functionName: "approve",
+                args: [cfg.address, budget],
+              });
+              const approveTx = await sendTransaction({
+                to: USDC_ADDRESS,
+                data: approveData,
+              });
+              const approvalReceipt = await publicClient.waitForTransactionReceipt({
+                hash: approveTx.hash as `0x${string}`,
+              });
+              if (approvalReceipt.status === "reverted") {
+                throw new Error("USDC approval failed");
+              }
+            }
+          }
+
+          // Step 2: createCampaign(config).
+          setStep("creating");
+
+          if (wallet.walletType === "external") {
+            // @ts-expect-error - wagmi infers chain and account from context
+            txHash = await writeContractAsync({
+              address: cfg.address,
+              abi: claimCoreAbi,
+              functionName: "createCampaign",
+              args: [struct],
+            });
+          } else {
+            if (!sendTransaction) throw new Error("sendTransaction not available");
+            const data = encodeCreateCampaignData(struct);
+            const tx = await sendTransaction({ to: cfg.address, data });
+            txHash = tx.hash as `0x${string}`;
+          }
+
+          // Persist the hash *before* waiting for the receipt: if this tab dies now, the next
+          // attempt must reconcile this transaction instead of creating another campaign.
+          recordPendingFunding({
+            campaignId: prepared.campaignId,
+            txHash,
+            startedAt: new Date().toISOString(),
+          });
         }
 
         // Step 3: wait for the canonical CampaignFunded event.
         setStep("confirming");
         const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
         if (receipt.status === "reverted") {
+          // The attempt is over: a retry must create a fresh campaign rather than re-confirm this.
+          clearPendingFunding(prepared.campaignId);
           throw new Error("createCampaign reverted on-chain");
         }
 
@@ -295,6 +323,7 @@ export function useFundNomineCampaign() {
           txHash
         );
 
+        clearPendingFunding(prepared.campaignId);
         setStep("funded");
         return confirmed;
       } catch (err: unknown) {

@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { FullPageLoader, Spinner } from "@/components/Loader";
 import { useAccount } from "wagmi";
+import { rosterEmailFor } from "@/lib/issuerRoster";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -248,6 +249,13 @@ export default function StudioCampaign() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="space-y-1 text-sm">
                     <div className="font-mono">{request.walletAddress}</div>
+                    <div className="text-muted-foreground">
+                      {rosterEmailFor(campaign.id, request.entitlementId) ?? (
+                        <span className="italic">
+                          no local record — check your exported mapping before approving
+                        </span>
+                      )}
+                    </div>
                     <div className="text-muted-foreground">
                       {formatUsdcDisplay(request.amount)} · deadline{" "}
                       {formatTimestampWithTimezone(request.deadline)}

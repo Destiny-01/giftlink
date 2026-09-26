@@ -102,6 +102,14 @@ export interface PrepareCampaignResponse {
   entitlementRoot: string;
   paramsHash: string;
   status: string;
+  /**
+   * Issuer-only recipient export: the normalized address behind each identifier, returned **once**
+   * at prepare time so the issuer can retain it outside Nomine. This is intentional and
+   * unavoidable - the issuer cannot meaningfully approve a wallet assignment for an identity it
+   * cannot name, and a record it does not hold is worth nothing when Nomine is unavailable. Nomine
+   * itself stores only the salted hash; this field must never be logged or persisted server-side.
+   */
+  mapping: Array<{ entitlementId: string; email: string }>;
 }
 
 export interface CampaignAccountingResponse {

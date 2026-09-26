@@ -10,6 +10,7 @@ import { nomineClaimCoreInterface } from "../config/claimCoreAbi";
 import { logger } from "../config/logger";
 import { errorDiagnostics } from "../utils/safeLog";
 import { getBlockTimestamp } from "./chainEvidence";
+import { entitlementRoot as computeEntitlementRoot } from "../utils/claimCore";
 
 /**
  * Canonical-event indexer for Nomine Claim Core (`docs/nomine-claim-core-integration.md` §6).
@@ -245,8 +246,76 @@ async function findCampaignForEvent(event: ClaimEvent) {
   });
 }
 
+/**
+ * Bind a funding event to a draft whose confirmation never arrived.
+ *
+ * The normal path requires an already-recorded `onchainId`, so a lost confirmation (the browser was
+ * closed, the request failed, the indexer ran first) left the campaign funded on-chain but unbound
+ * locally, and its entitlements could never settle. Matching is on the *immutable committed
+ * configuration* the event carries, and is accepted only when exactly one draft matches, so a
+ * coincidental partial match cannot attach funds to a different roster.
+ */
+async function bindUnboundDraft(event: ClaimEvent) {
+  const metadata = (event.metadata ?? {}) as Record<string, unknown>;
+  const issuer = String(event.walletAddress ?? "").toLowerCase();
+  const issuerApprover =
+    typeof metadata.issuerApprover === "string" ? metadata.issuerApprover.toLowerCase() : null;
+  const resolver =
+    typeof metadata.resolver === "string" ? metadata.resolver.toLowerCase() : null;
+  const allocation = typeof metadata.allocation === "string" ? metadata.allocation : null;
+  const entitlementCount =
+    typeof metadata.entitlementCount === "number" ? metadata.entitlementCount : null;
+  const committedRoot =
+    typeof metadata.entitlementRoot === "string" ? metadata.entitlementRoot.toLowerCase() : null;
+
+  if (
+    !issuer ||
+    !issuerApprover ||
+    !resolver ||
+    !allocation ||
+    entitlementCount === null ||
+    !committedRoot
+  ) {
+    return null;
+  }
+
+  const candidates = await prisma.campaign.findMany({
+    where: {
+      chainId: event.chainId,
+      contractAddress: event.contractAddress,
+      onchainId: null,
+      status: CampaignStatus.DRAFT,
+      issuerAddress: issuer,
+      issuerApproverAddress: issuerApprover,
+      resolverAddress: resolver,
+      allocation,
+      entitlementCount,
+    },
+    select: { id: true, entitlements: { select: { entitlementId: true } } },
+    take: 2,
+  });
+
+  if (candidates.length !== 1) {
+    return null;
+  }
+
+  // The commitment binds the funded roster to the prepared roster: the five scalar matches alone
+  // could still describe different entitlement identifiers.
+  const candidate = candidates[0];
+  const identifiers = candidate.entitlements.map((item) => item.entitlementId);
+  if (identifiers.length !== entitlementCount) {
+    return null;
+  }
+  if (computeEntitlementRoot(identifiers).toLowerCase() !== committedRoot) {
+    return null;
+  }
+
+  return { id: candidate.id };
+}
+
 async function replayFunding(event: ClaimEvent): Promise<number> {
-  const campaign = await findCampaignForEvent(event);
+  const campaign =
+    (await findCampaignForEvent(event)) ?? (await bindUnboundDraft(event));
   if (!campaign) {
     return 0;
   }

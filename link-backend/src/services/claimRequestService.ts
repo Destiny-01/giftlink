@@ -175,6 +175,17 @@ export async function createConsent(
 
   await requireOwnEntitlement(authUser as AuthenticatedUser, campaignId, input.entitlementId);
 
+  // Reconcile on-chain consumption before anything else: a settled entitlement can never take a
+  // new consent, and the indexer's record of consumption wins over any local request row.
+  const entitlement = await prisma.entitlement.findUnique({
+    where: {
+      campaignId_entitlementId: { campaignId, entitlementId: input.entitlementId },
+    },
+  });
+  if (entitlement?.consumedAt) {
+    throw new ValidationError("This entitlement has already been settled");
+  }
+
   const now = Math.floor(Date.now() / 1000);
   if (now < unixSeconds(campaign.openingTime)) {
     throw new ValidationError("This campaign is not open yet");
@@ -225,9 +236,76 @@ export async function createConsent(
     ) {
       return mapRequestReceipt(existing);
     }
+
+    // A standing request may be replaced only when it can no longer settle. The contract refuses
+    // a settlement when `now > deadline`, so at exactly `deadline` the old signature is still
+    // live and must not be discarded (there is no revocation). A request that is in flight or
+    // already settled is likewise never replaced.
+    const canRenew =
+      existing.status !== ClaimRequestStatus.SETTLED &&
+      existing.status !== ClaimRequestStatus.SUBMITTED &&
+      now > unixSeconds(existing.deadline);
+
+    if (!canRenew) {
+      throw new ValidationError(
+        "A live claim request already exists for this entitlement. The contract has no " +
+          "revocation, so the standing signed request remains in force."
+      );
+    }
+
+    // Renew atomically and only against the exact row that was read, so a concurrent consent
+    // cannot be clobbered. The previous authority signatures and submission evidence belong to
+    // the replaced request and are cleared with it.
+    const renewed = await prisma.claimRequest.updateMany({
+      where: {
+        id: existing.id,
+        status: existing.status,
+        deadline: existing.deadline,
+        consentDigest: existing.consentDigest,
+      },
+      data: {
+        walletAddress: wallet,
+        amount: campaign.allocation,
+        deadline: new Date(input.deadline * 1000),
+        status: ClaimRequestStatus.CONSENTED,
+        consentSignature: input.signature,
+        consentDigest: digest,
+        issuerApprovalSignature: null,
+        resolverSignature: null,
+        submitTxHash: null,
+        failureReason: null,
+        updatedAt: new Date(),
+      },
+    });
+
+    const afterRenewal = await prisma.claimRequest.findUnique({
+      where: { id: existing.id },
+    });
+
+    if (renewed.count === 1) {
+      logger.info(
+        {
+          operation: "createConsent",
+          outcome: "renewed_expired",
+          campaignId,
+          requestId: existing.id,
+        },
+        "Expired consent replaced with a fresh signed request"
+      );
+      if (afterRenewal) return mapRequestReceipt(afterRenewal);
+    }
+
+    // Lost the race: another request landed first. Converge when it is this exact request.
+    if (
+      afterRenewal &&
+      afterRenewal.consentDigest?.toLowerCase() === digest.toLowerCase() &&
+      afterRenewal.walletAddress.toLowerCase() === wallet
+    ) {
+      return mapRequestReceipt(afterRenewal);
+    }
+
     throw new ValidationError(
-      "A live claim request already exists for this entitlement. The contract has no " +
-        "revocation, so the standing signed request remains in force."
+      "A conflicting claim request was created concurrently. Please retry."
     );
   }
 

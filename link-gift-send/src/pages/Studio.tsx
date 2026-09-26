@@ -32,6 +32,7 @@ import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useAccount, useSwitchChain } from "wagmi";
+import { downloadRoster, saveRoster } from "@/lib/issuerRoster";
 import { ensureArcNetwork } from "@/lib/chainUtils";
 import {
   useFundNomineCampaign,
@@ -169,6 +170,9 @@ export default function Studio() {
         issuerApproverAddress: approver.trim(),
       });
       setPrepared(result);
+      // Retain the recipient mapping locally: Nomine stores only the salted hash, so this is the
+      // only record that can tie a later approval request to a person the issuer recognises.
+      saveRoster(result.campaignId, result.mapping);
       toast({ title: "Draft prepared", description: "Review the immutable terms before funding" });
     } catch (error: unknown) {
       toast({
@@ -284,6 +288,25 @@ export default function Studio() {
               <NomineFactRow label="Issuer-approval address" value={prepared.config.issuerApprover} mono />
               <NomineFactRow label="Resolver address" value={prepared.config.resolver} mono />
               <NomineFactRow label="Entitlement root" value={prepared.entitlementRoot} mono />
+              <div className="mt-3 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                <div className="font-medium text-foreground">
+                  Recipient mapping — keep your own copy
+                </div>
+                <p className="mt-1">
+                  Nomine keeps only a salted hash of each address, so it cannot tell you who a later
+                  approval request belongs to. This record is what lets you verify a wallet
+                  assignment independently. Download it and store it outside Nomine.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => downloadRoster(prepared.campaignId, prepared.mapping)}
+                >
+                  Download recipient mapping (CSV)
+                </Button>
+              </div>
               <NomineFactRow label="Chain" value={CLAIM_CORE_CHAIN_ID} />
             </div>
 

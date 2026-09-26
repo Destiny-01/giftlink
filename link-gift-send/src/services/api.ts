@@ -642,6 +642,7 @@ interface RawPrepareResponse {
   entitlementRoot: string;
   paramsHash: string;
   status: string;
+  mapping?: Array<{ entitlementId: string; email: string }>;
 }
 
 interface RawConfirmResponse {
@@ -851,6 +852,10 @@ export async function prepareNomineCampaign(
       entitlementRoot: raw.entitlementRoot as Hex,
       paramsHash: raw.paramsHash,
       status: raw.status as CampaignStatus,
+      mapping: (raw.mapping ?? []).map((entry) => ({
+        entitlementId: entry.entitlementId as Hex,
+        email: entry.email,
+      })),
     };
   } catch (error) {
     throw normalizeError(error);

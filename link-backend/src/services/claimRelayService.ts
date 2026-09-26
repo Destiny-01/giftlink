@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Campaign, ClaimRequest } from "@prisma/client";
 import { CampaignStatus, ClaimEventType, ClaimRequestStatus } from "@prisma/client";
 import { Contract } from "ethers";
@@ -301,9 +302,15 @@ export async function settleClaim(
     request.entitlementId
   );
 
-  // Take the submission slot. Only a request that is *not* already in flight may take it, so
-  // two concurrent tabs cannot both broadcast: a `SUBMITTED` row is a held slot, not a free
-  // one. The contract's consumption check still backstops the race either way.
+  // Submission lease. A `SUBMITTED` row is a *held* slot, not a free one, and only the attempt
+  // that took it may complete or fail it. A slot is reclaimed only when it is demonstrably
+  // abandoned: the lease has aged past the TTL *and* no settlement exists on-chain. Reclaiming on
+  // "has not settled yet" alone let a second concurrent caller broadcast while the first was
+  // still in flight, which duplicates gas and races the workflow state.
+  const RELAY_LEASE_MS = 120_000;
+  const attemptId = randomUUID();
+  const leaseCutoff = new Date(Date.now() - RELAY_LEASE_MS);
+
   const takeSlot = () =>
     prisma.claimRequest.updateMany({
       where: {
@@ -319,6 +326,7 @@ export async function settleClaim(
       data: {
         status: ClaimRequestStatus.SUBMITTED,
         resolverSignature,
+        submitAttemptId: attemptId,
         updatedAt: new Date(),
       },
     });
@@ -332,21 +340,39 @@ export async function settleClaim(
     }
 
     if (current?.status === ClaimRequestStatus.SUBMITTED) {
-      // A previous attempt may have died mid-flight. If it did not settle on-chain the slot
-      // is stale, so demote it once and retry: a crash must not wedge the request forever.
+      // An in-flight attempt may have settled even though we never saw the receipt.
       const reconciled = await reconcileSubmission(campaign, current);
       if (reconciled) {
         return reconciled;
       }
-      await prisma.claimRequest.updateMany({
+
+      // Still inside its lease: the other caller owns this attempt and we must not preempt it.
+      if (current.updatedAt > leaseCutoff) {
+        throw new ServiceUnavailableError(
+          "A settlement attempt for this request is already in progress."
+        );
+      }
+
+      // Abandoned. Demote conditionally on the exact row we read, so a newer attempt that landed
+      // in the meantime is never clobbered.
+      const demoted = await prisma.claimRequest.updateMany({
         where: {
           id: request.id,
           status: ClaimRequestStatus.SUBMITTED,
           settlementTxHash: null,
+          updatedAt: current.updatedAt,
         },
-        data: { status: ClaimRequestStatus.FAILED, updatedAt: new Date() },
+        data: {
+          status: ClaimRequestStatus.FAILED,
+          failureReason: "relay_lease_expired",
+          submitAttemptId: null,
+          updatedAt: new Date(),
+        },
       });
-      claim = await takeSlot();
+
+      if (demoted.count === 1) {
+        claim = await takeSlot();
+      }
     }
 
     if (claim.count === 0) {
@@ -391,7 +417,8 @@ export async function settleClaim(
     );
 
     await prisma.claimRequest.updateMany({
-      where: { id: request.id },
+      // Scoped to this attempt: a superseded attempt must not overwrite a newer one's evidence.
+      where: { id: request.id, submitAttemptId: attemptId },
       data: { submitTxHash: tx.hash, updatedAt: new Date() },
     });
 
@@ -399,10 +426,11 @@ export async function settleClaim(
   } catch (error) {
     if (isInsufficientFundsError(error)) {
       await prisma.claimRequest.updateMany({
-        where: { id: request.id },
+        where: { id: request.id, submitAttemptId: attemptId },
         data: {
           status: ClaimRequestStatus.ISSUER_APPROVED,
           failureReason: "relayer_insufficient_funds",
+          submitAttemptId: null,
           updatedAt: new Date(),
         },
       });
