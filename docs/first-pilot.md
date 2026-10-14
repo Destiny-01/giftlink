@@ -2,13 +2,15 @@
 
 This is the first small test of the larger Claim and economic inbox vision. It is a working hypothesis, not a promise to build every part of the protocol now.
 
+> **Status (September 26, 2026):** reconciled with the approved pilot as built. The hypotheses below are historical. The controlled pilot's eligibility method is **verified email** as its sole source, it runs on **Arc testnet only**, and it involves no real funds or mainnet. Where this document disagrees with `docs/PRODUCT.md`, `docs/DECISIONS.md`, or `docs/nomine-v1-implementation-brief.md`, those documents govern.
+
 ## The problem to investigate
 
 A community or protocol has a reward budget and wants to give a specific amount to eligible members. Today it may have to identify wallets, assemble a list, prevent duplicate claims, distribute funds, answer support questions, and recover unused money. We need to learn which of those steps is genuinely painful and worth solving.
 
 ## The proposed experience
 
-An issuer funds a USDC reward pool and declares who qualifies. For the first pilot, eligibility should use **one** clearly named source: either a wallet allowlist at a fixed snapshot or a community-maintained membership attestation. The system shows the trust source plainly.
+An issuer funds a USDC reward pool and declares who qualifies. For the first pilot, eligibility uses **one** clearly named source: the approved controlled pilot uses **verified email**, derived server-side from the identity provider, as its sole method. The system shows the trust source plainly.
 
 An eligible member discovers a funded Claim through a link or inbox, proves eligibility, and receives USDC without paying claim gas. The issuer sees settlement records and can recover unused funds after the agreed expiry.
 

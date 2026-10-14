@@ -1,0 +1,106 @@
+{
+  "issue": 13,
+  "purpose": "Two-recipient pilot walkthrough of the deployed Nomine Claim Core on Arc testnet",
+  "completedAt": "2026-09-26T15:35:09.507Z",
+  "chainId": 5042002,
+  "contract": "0x9D390dCa06118302C8194CC214Ed9BC7f5969810",
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "explorer": "https://explorer.testnet.arc.io",
+  "campaignId": "4",
+  "allocation": "0.10",
+  "entitlementCount": 3,
+  "opening": 1790436769,
+  "expiry": 1790436889,
+  "actors": {
+    "issuer": "0xe3C71da511A74b18ac41d4E19308aeEE980b98E1",
+    "sponsor": "0x7B1fE526f09FE1aD9FD0C228AA9FEDd271e2c201",
+    "issuerApprover": "0x4eD06A67517757fDa479b6692268CAE5597B101B",
+    "resolver": "0x1ec6f437f29f8989eF02c1d85cD4e5a68AdbA7B5",
+    "claimants": [
+      "0x634FDf6bf7BB32343EBcBc0796704611CeD7aC8A",
+      "0xB07bd3fbA0dDf5A483A5eaBF70b4BA96EbfD116c"
+    ]
+  },
+  "note": "issuerApprover, resolver and claimants are ephemeral in-memory keys generated for signature-separation evidence. Their private keys were discarded. This is automated test evidence and is NOT proof of the external human issuer approval process, which is performed by a real issuer-held wallet in Nomine Studio.",
+  "transactions": [
+    {
+      "label": "fund campaign",
+      "hash": "0xd494af87b97d9c969cfddc6ace1c8557433cf0c565e2684c83c1050a38e4564b",
+      "block": 64121494,
+      "gasUsed": "212424",
+      "fee": "4460904000000000"
+    },
+    {
+      "label": "sponsored settlement claimant1",
+      "hash": "0x526506cb811510de0ef7e89b1739ce0985f0822a5029568a821999ebbeed0c58",
+      "block": 64121520,
+      "gasUsed": "149107",
+      "fee": "3162559470000000"
+    },
+    {
+      "label": "sponsored settlement claimant2",
+      "hash": "0x14b6583fe74eba5b7f22ed47d2c90c93573722343a750f6d68983f26737a2ef4",
+      "block": 64121530,
+      "gasUsed": "149104",
+      "fee": "3280288000000000"
+    },
+    {
+      "label": "expiry recovery",
+      "hash": "0x7875c71f14c42db281c1fe766aa14330a58eb5cb7903fa4edbe7c333e77234c1",
+      "block": 64121757,
+      "gasUsed": "82273",
+      "fee": "2056825000000000"
+    }
+  ],
+  "settlements": [
+    {
+      "entitlementId": "0x01efa825fa9181f1f5f107abe2c882dccc0a56065d78a432b95b65ada7ca9b91",
+      "wallet": "0x634FDf6bf7BB32343EBcBc0796704611CeD7aC8A",
+      "amount": "0.10",
+      "txHash": "0x526506cb811510de0ef7e89b1739ce0985f0822a5029568a821999ebbeed0c58",
+      "submitter": "0x7B1fE526f09FE1aD9FD0C228AA9FEDd271e2c201"
+    },
+    {
+      "entitlementId": "0xed1f575fa2789c07a3b4f1a3647ffe13af022d104ac7f12fbbb5c46709014f66",
+      "wallet": "0xB07bd3fbA0dDf5A483A5eaBF70b4BA96EbfD116c",
+      "amount": "0.10",
+      "txHash": "0x14b6583fe74eba5b7f22ed47d2c90c93573722343a750f6d68983f26737a2ef4",
+      "submitter": "0x7B1fE526f09FE1aD9FD0C228AA9FEDd271e2c201"
+    }
+  ],
+  "refusals": [
+    {
+      "label": "replay of a settled entitlement",
+      "expectedError": "EntitlementAlreadyConsumed",
+      "observed": "EntitlementAlreadyConsumed"
+    },
+    {
+      "label": "issuer approval reused as resolver attestation",
+      "expectedError": "InvalidResolverApproval",
+      "observed": "InvalidResolverApproval"
+    },
+    {
+      "label": "settlement after expiry",
+      "expectedError": "CampaignExpired",
+      "observed": "CampaignExpired"
+    }
+  ],
+  "replay": {
+    "funded": "300000",
+    "settled": "200000",
+    "reclaimed": "100000",
+    "consumed": [
+      "0x01efa825fa9181f1f5f107abe2c882dccc0a56065d78a432b95b65ada7ca9b91",
+      "0xed1f575fa2789c07a3b4f1a3647ffe13af022d104ac7f12fbbb5c46709014f66"
+    ],
+    "remaining": "100000",
+    "escrowBalance": "0"
+  },
+  "conservation": {
+    "funded": "0.3",
+    "settled": "0.2",
+    "reclaimed": "0.1",
+    "asset": "test USDC"
+  },
+  "completed": true
+}

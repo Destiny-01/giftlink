@@ -93,3 +93,18 @@ Each listed entitlement is fully funded for the fixed USDC allocation, single-us
 Funded campaigns are immutable: no upgrades, approving-key replacement, eligibility changes, or early withdrawal. Allocation, membership commitment, approving authorities, opening time, expiry, and recovery destination are fixed at funding. Unused funds remain recoverable only after expiry under that fixed rule, without requiring claimant consent or either Gate attestation. Losing an approving key can prevent settlement until expiry; it must not prevent expiry recovery. The pilot uses the issuer address as the fixed recovery destination. Relay sponsorship is funded separately and does not reduce the promised allocation.
 
 Required verification includes either signer acting alone, missing or invalid claimant consent, replay across payout contexts, wallet substitution, fabricated membership, expired approvals, double settlement, timing boundaries, full funding and conservation, prohibited campaign mutations, and expiry recovery when either approver is unavailable. Collusion between both Gate authorities remains the explicit risk described in D-006, not a guarantee that tests can establish away.
+
+## D-020 — Pre-opening Claims are Available, gated by an explicit Opens label
+
+Approved September 26, 2026. A funded Claim whose campaign has not yet reached its opening time appears in
+the claimant's inbox under **Available**, carrying an explicit **Opens <date and time>** label with the
+relevant timezone, and claiming stays disabled until opening. It is never presented as immediately
+claimable.
+
+Approval and transaction workflow states — **Awaiting issuer confirmation**, awaiting Resolver attestation,
+and pending submission — are workflow statuses inside **Available**, not lifecycle groups. The three
+claimant-facing lifecycle groups remain **Available**, **Completed**, and **Expired**.
+
+Oversubscription is not reintroduced anywhere. The deployed Claim Core funds every listed entitlement for
+its own allocation, so an eligible unconsumed entitlement with no backing is a reconciliation error rather
+than a first-come allocation window or a fabricated **Expired** state.

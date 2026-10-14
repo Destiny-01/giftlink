@@ -9,6 +9,10 @@ import Create from "./pages/Create";
 import Claim from "./pages/Claim";
 import Activity from "./pages/Activity";
 import Settings from "./pages/Settings";
+import Studio from "./pages/Studio";
+import StudioCampaign from "./pages/StudioCampaign";
+import Inbox from "./pages/Inbox";
+import CampaignLink from "./pages/CampaignLink";
 import NotFound from "./pages/NotFound";
 
 const App = () => (
@@ -24,6 +28,10 @@ const App = () => (
         <Route path="/claim/:id" element={<Claim />} />
         <Route path="/activity" element={<Activity />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/studio" element={<Studio />} />
+        <Route path="/studio/:campaignId" element={<StudioCampaign />} />
+        <Route path="/inbox" element={<Inbox />} />
+        <Route path="/campaign/:campaignId" element={<CampaignLink />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
