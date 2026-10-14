@@ -4,11 +4,10 @@ import type { ClaimEvent } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { env } from "../config/env";
-import { getRpcProvider } from "../config/arcClient";
+import { getIndexerProvider } from "../config/arcClient";
 import { CLAIM_CORE_EVENTS, nomineClaimCoreInterface } from "../config/claimCoreAbi";
 import { logger } from "../config/logger";
 import { errorDiagnostics } from "../utils/safeLog";
-import { getBlockTimestamp } from "./chainEvidence";
 import { entitlementRoot as computeEntitlementRoot } from "../utils/claimCore";
 
 /**
@@ -42,15 +41,29 @@ const PASS_TIME_BUDGET_MS = 4 * 60 * 1000;
  */
 const CANONICAL_EVENT_NAMES = new Set<string>(Object.values(CLAIM_CORE_EVENTS));
 
+/** A transient RPC failure is retried after `base * 2^attempt` ms, capped, at most this often. */
+const RPC_MAX_RETRIES = 6;
+const RPC_RETRY_BASE_DELAY_MS = 1000;
+const RPC_RETRY_MAX_DELAY_MS = 16_000;
 /**
- * Whether an RPC failure looks like the node refusing a block range rather than a transient
- * or authorization problem.
- *
- * Only a range/size rejection is worth retrying with a smaller window. Shrinking on anything
- * else would silently mask a real failure (bad auth, a dead endpoint) behind a storm of extra
- * requests, so the two are deliberately kept apart.
+ * Pause between consecutive windows. A catch-up issues hundreds of log queries back to back,
+ * and Arc's public endpoint rate-limits a burst within a few requests; a short pause keeps a
+ * catch-up under that limit at the cost of 250 ms per window.
  */
-function isRangeOrSizeError(error: unknown): boolean {
+const WINDOW_PACING_MS = 250;
+
+export type Sleep = (ms: number) => Promise<void>;
+
+const defaultSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * The raw JSON-RPC code(s) and message text of an RPC failure.
+ *
+ * ethers wraps a JSON-RPC failure: the top-level `code` is ethers' own string code and the raw
+ * server code/message are attached nested (under `error` on the default path, `info.error` on
+ * others).
+ */
+function describeRpcError(error: unknown): { codes: unknown[]; text: string } {
   const candidate = error as
     | {
         code?: unknown;
@@ -61,23 +74,8 @@ function isRangeOrSizeError(error: unknown): boolean {
       }
     | null;
 
-  // ethers wraps a JSON-RPC failure: `candidate.code` is ethers' own string code and the raw
-  // server code/message are attached nested (under `error` on the default path, `info.error`
-  // on others). A range rejection is recognized by that raw code, or by its message text.
   const nested = [candidate?.error, candidate?.info?.error];
   const codes = [candidate?.code, ...nested.map((entry) => entry?.code)];
-
-  for (const code of codes) {
-    if (
-      code === -32005 ||
-      code === -32602 ||
-      code === "-32005" ||
-      code === "-32602"
-    ) {
-      return true;
-    }
-  }
-
   const text = [
     typeof candidate?.message === "string" ? candidate.message : "",
     typeof candidate?.shortMessage === "string" ? candidate.shortMessage : "",
@@ -89,9 +87,118 @@ function isRangeOrSizeError(error: unknown): boolean {
     .join(" ")
     .toLowerCase();
 
+  return { codes, text };
+}
+
+/**
+ * Whether an RPC failure is transient - the endpoint throttling us or briefly failing - rather
+ * than refusing the request.
+ *
+ * Arc's public endpoint reports throttling as JSON-RPC `-32005` "rate limit exceeded" (the same
+ * code some nodes use for an oversized range, so the message decides) and intermittently answers
+ * a valid log query with `-32603` "internal error" that succeeds on retry. Either way the request
+ * is retried unchanged after a backoff: shrinking the window would only multiply the requests.
+ */
+export function isTransientRpcError(error: unknown): boolean {
+  const { codes, text } = describeRpcError(error);
+  if (
+    codes.some(
+      (code) =>
+        code === 429 ||
+        code === "429" ||
+        code === -32603 ||
+        code === "-32603" ||
+        code === "TIMEOUT" ||
+        code === "SERVER_ERROR"
+    )
+  ) {
+    return true;
+  }
+  return [
+    "rate limit",
+    "rate-limit",
+    "ratelimit",
+    "too many requests",
+    "internal error",
+    "timeout",
+    "timed out",
+    "bad gateway",
+    "service unavailable",
+  ].some((token) => text.includes(token));
+}
+
+/**
+ * Whether an RPC failure looks like the node refusing a block range rather than a transient
+ * or authorization problem.
+ *
+ * Only a range/size rejection is worth retrying with a smaller window. Shrinking on anything
+ * else would silently mask a real failure (bad auth, a dead endpoint, throttling or a transient fault) behind a storm
+ * of extra requests, so the cases are deliberately kept apart.
+ */
+function isRangeOrSizeError(error: unknown): boolean {
+  if (isTransientRpcError(error)) {
+    return false;
+  }
+
+  const { codes, text } = describeRpcError(error);
+  for (const code of codes) {
+    if (
+      code === -32005 ||
+      code === -32602 ||
+      code === "-32005" ||
+      code === "-32602"
+    ) {
+      return true;
+    }
+  }
+
   return ["range", "limit", "too many", "exceed"].some((token) =>
     text.includes(token)
   );
+}
+
+/**
+ * Runs one RPC request, retrying it with exponential backoff while the failure is transient
+ * (throttling, an intermittent internal error). Any other failure, or a transient one that
+ * outlasts the retries, propagates unchanged.
+ */
+async function withTransientRetry<T>(request: () => Promise<T>, sleep: Sleep): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request();
+    } catch (error) {
+      if (!isTransientRpcError(error) || attempt >= RPC_MAX_RETRIES) {
+        throw error;
+      }
+      const delay = Math.min(RPC_RETRY_BASE_DELAY_MS * 2 ** attempt, RPC_RETRY_MAX_DELAY_MS);
+      logger.debug(
+        { operation: "claimIndexerRpc", outcome: "transient_rpc_error", attempt: attempt + 1, delay },
+        "Transient RPC failure; retrying after a backoff"
+      );
+      await sleep(delay);
+    }
+  }
+}
+
+/**
+ * The block's timestamp, or null when it cannot be read. Transient failures are retried so a catch-up
+ * records chain time rather than falling back to the server clock; any other failure stays
+ * non-fatal, as in `getBlockTimestamp`.
+ */
+async function readBlockTimestamp(
+  provider: JsonRpcProvider,
+  blockNumber: number,
+  sleep: Sleep
+): Promise<Date | null> {
+  try {
+    const block = await withTransientRetry(() => provider.getBlock(blockNumber), sleep);
+    if (block && typeof block.timestamp === "number") {
+      return new Date(block.timestamp * 1000);
+    }
+  } catch {
+    // Non-fatal: the caller falls back to the server clock.
+  }
+  return null;
 }
 
 export interface ClaimIndexerScanResult {
@@ -115,7 +222,8 @@ export interface ClaimIndexerReplayResult {
 async function storeClaimEvent(
   log: { topics: ReadonlyArray<string>; data: string; index: number; transactionHash: string; blockNumber: number },
   contractAddress: string,
-  provider: JsonRpcProvider
+  provider: JsonRpcProvider,
+  sleep: Sleep
 ): Promise<number> {
   let parsed;
   try {
@@ -151,7 +259,7 @@ async function storeClaimEvent(
     select: { id: true },
   });
 
-  const blockTimestamp = await getBlockTimestamp(log.blockNumber, provider);
+  const blockTimestamp = await readBlockTimestamp(provider, log.blockNumber, sleep);
 
   let eventType: ClaimEventType;
   let entitlementId: string | null = null;
@@ -223,13 +331,24 @@ async function storeClaimEvent(
  * window instead of re-reading the whole range. A window the node rejects as too large is
  * halved and retried; any other failure aborts the pass rather than silently shrinking it.
  *
+ * A transient failure (throttling, an intermittent internal error) is a third case: it is retried
+ * unchanged after an exponential backoff, and consecutive windows are paced, because a public
+ * endpoint rate-limits a catch-up long before it rejects a range.
+ *
  * A pass also stops starting new windows after a fixed time budget and leaves the rest to the
  * next pass, so a multi-million-block catch-up cannot hold the process open indefinitely.
  */
 export async function scanClaimEvents(
-  options: { provider?: JsonRpcProvider; fromBlock?: number; toBlock?: number } = {}
+  options: {
+    provider?: JsonRpcProvider;
+    fromBlock?: number;
+    toBlock?: number;
+    /** Injected so tests can observe backoff and pacing without waiting on real timers. */
+    sleep?: Sleep;
+  } = {}
 ): Promise<ClaimIndexerScanResult> {
-  const provider = options.provider ?? getRpcProvider();
+  const provider = options.provider ?? getIndexerProvider();
+  const sleep = options.sleep ?? defaultSleep;
   const contractAddress = env.CLAIM_CORE_CONTRACT_ADDRESS.toLowerCase();
 
   const checkpoint = await prisma.chainCheckpoint.findUnique({
@@ -247,7 +366,8 @@ export async function scanClaimEvents(
       checkpoint ? Number(checkpoint.lastScannedBlock) + 1 : 0,
       env.CLAIM_CORE_DEPLOY_BLOCK
     );
-  const toBlock = options.toBlock ?? (await provider.getBlockNumber());
+  const toBlock =
+    options.toBlock ?? (await withTransientRetry(() => provider.getBlockNumber(), sleep));
 
   if (fromBlock > toBlock) {
     return { fromBlock, toBlock, stored: 0 };
@@ -277,11 +397,15 @@ export async function scanClaimEvents(
 
     let logs;
     try {
-      logs = await provider.getLogs({
-        address: contractAddress,
-        fromBlock: cursor,
-        toBlock: windowTo,
-      });
+      logs = await withTransientRetry(
+        () =>
+          provider.getLogs({
+            address: contractAddress,
+            fromBlock: cursor,
+            toBlock: windowTo,
+          }),
+        sleep
+      );
     } catch (error) {
       // The node refused this window as too large: shrink and retry the *same* window, so the
       // range stays contiguous and nothing is skipped.
@@ -293,7 +417,7 @@ export async function scanClaimEvents(
     }
 
     for (const log of logs) {
-      stored += await storeClaimEvent(log, contractAddress, provider);
+      stored += await storeClaimEvent(log, contractAddress, provider, sleep);
     }
 
     // Advance the durable checkpoint before moving on: the completed window is now the
@@ -315,6 +439,10 @@ export async function scanClaimEvents(
 
     scannedTo = windowTo;
     cursor = windowTo + 1;
+
+    if (cursor <= toBlock) {
+      await sleep(WINDOW_PACING_MS);
+    }
   }
 
   logger.info(

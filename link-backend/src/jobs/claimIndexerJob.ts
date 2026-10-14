@@ -1,8 +1,10 @@
 import { CronJob } from "cron";
+import type { JsonRpcProvider } from "ethers";
 import { env } from "../config/env";
 import { logger } from "../config/logger";
 import { errorDiagnostics } from "../utils/safeLog";
-import { getRpcProvider } from "../config/arcClient";
+import { ConfigurationError } from "../utils/errors";
+import { getIndexerProvider } from "../config/arcClient";
 import { runClaimIndexerOnce } from "../services/claimIndexer";
 import { assertClaimCoreConfiguration } from "../services/claimCoreEvidence";
 
@@ -23,9 +25,24 @@ import { assertClaimCoreConfiguration } from "../services/claimCoreEvidence";
  * arrives while a pass is still running is skipped (logged at `debug`) rather than started.
  */
 
-/** The work one pass performs: verify the deployment, scan the chain, then replay. */
+/**
+ * The indexer's provider is pinned to `CHAIN_ID` and never asks the endpoint which chain it is
+ * on, so ask once per pass: a misconfigured `RPC_URL` must stop the pass, not index another chain.
+ */
+async function assertIndexerChainId(provider: JsonRpcProvider): Promise<void> {
+  const reported = BigInt(await provider.send("eth_chainId", []));
+  if (reported !== BigInt(env.CHAIN_ID)) {
+    throw new ConfigurationError(
+      `RPC_URL reports chain id ${reported}, but CHAIN_ID is ${env.CHAIN_ID}. ` +
+        "Refusing to index the wrong network."
+    );
+  }
+}
+
+/** The work one pass performs: verify the network and deployment, scan the chain, then replay. */
 async function executeClaimIndexerPass(): Promise<void> {
-  const provider = getRpcProvider();
+  const provider = getIndexerProvider();
+  await assertIndexerChainId(provider);
   await assertClaimCoreConfiguration(provider);
 
   const { scan, replay } = await runClaimIndexerOnce({ provider });

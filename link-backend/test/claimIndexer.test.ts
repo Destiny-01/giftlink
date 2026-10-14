@@ -51,6 +51,7 @@ let checkpoint: { lastScannedBlock: bigint } | null = null;
 let checkpointUpserts: number[] = [];
 let latestBlock = 0;
 let logsToReturn: unknown[] = [];
+let getBlockThrottles = 0;
 let getLogsFailure: (call: { fromBlock: number; toBlock: number }) => Error | null = () =>
   null;
 const getLogsCalls: { address: string; fromBlock: number; toBlock: number }[] = [];
@@ -66,7 +67,13 @@ const campaignUpdates: { where: Record<string, unknown> }[] = [];
  */
 const provider = {
   getBlockNumber: async () => latestBlock,
-  getBlock: async () => ({ timestamp: 1_700_000_000 }),
+  getBlock: async () => {
+    if (getBlockThrottles > 0) {
+      getBlockThrottles--;
+      throw rateLimitError();
+    }
+    return { timestamp: 1_700_000_000 };
+  },
   getLogs: async (filter: { address: string; fromBlock: number; toBlock: number }) => {
     getLogsCalls.push({
       address: filter.address,
@@ -81,8 +88,22 @@ const provider = {
   },
 };
 
+/** Every pause the scan asked for (backoff or pacing), recorded instead of waited on. */
+const sleeps: number[] = [];
+const recordSleep = async (ms: number) => {
+  sleeps.push(ms);
+};
+
 function scan(options: { fromBlock?: number; toBlock?: number } = {}) {
-  return scanClaimEvents({ provider: provider as never, ...options });
+  return scanClaimEvents({ provider: provider as never, sleep: recordSleep, ...options });
+}
+
+/** Arc's public endpoint throttling, wrapped the way ethers surfaces it. */
+function rateLimitError() {
+  return Object.assign(new Error("could not coalesce error"), {
+    code: "UNKNOWN_ERROR",
+    error: { code: -32005, message: "rate limit exceeded" },
+  });
 }
 
 function encodeLog(
@@ -194,6 +215,8 @@ beforeEach(() => {
   owner = null;
   campaignUpdates.length = 0;
   logRecords.length = 0;
+  sleeps.length = 0;
+  getBlockThrottles = 0;
   env.INDEXER_MAX_BLOCK_RANGE = 10000;
 });
 
@@ -279,6 +302,102 @@ describe("windowed adaptive scanning", () => {
     await scan({ fromBlock: start, toBlock: start + 999 });
 
     assert.deepEqual(checkpointUpserts, [start + 499, start + 999]);
+  });
+
+  test("a rate-limited window is retried at the same size after a backoff, not shrunk", async () => {
+    env.INDEXER_MAX_BLOCK_RANGE = 1000;
+    const start = 8_500_000;
+    let throttled = 0;
+    getLogsFailure = () => (throttled++ < 2 ? rateLimitError() : null);
+
+    await scan({ fromBlock: start, toBlock: start + 999 });
+
+    // Same window three times: two throttled attempts, then success. Never halved.
+    assert.deepEqual(
+      getLogsCalls.map((call) => [call.fromBlock, call.toBlock]),
+      [
+        [start, start + 999],
+        [start, start + 999],
+        [start, start + 999],
+      ]
+    );
+    assert.deepEqual(sleeps, [1000, 2000], "exponential backoff between attempts");
+    assert.deepEqual(checkpointUpserts, [start + 999]);
+  });
+
+  test("an intermittent internal error is retried unchanged rather than failing the pass", async () => {
+    env.INDEXER_MAX_BLOCK_RANGE = 1000;
+    const start = 8_550_000;
+    let failed = false;
+    getLogsFailure = () => {
+      if (failed) return null;
+      failed = true;
+      // Arc answers a valid query this way intermittently; the identical retry succeeds.
+      return Object.assign(new Error("could not coalesce error"), {
+        code: "UNKNOWN_ERROR",
+        error: { code: -32603, message: "internal error" },
+      });
+    };
+
+    await scan({ fromBlock: start, toBlock: start + 999 });
+
+    assert.deepEqual(
+      getLogsCalls.map((call) => [call.fromBlock, call.toBlock]),
+      [
+        [start, start + 999],
+        [start, start + 999],
+      ]
+    );
+    assert.deepEqual(checkpointUpserts, [start + 999]);
+  });
+
+  test("throttling that outlasts the retries aborts the pass with the checkpoint intact", async () => {
+    env.INDEXER_MAX_BLOCK_RANGE = 1000;
+    const start = 8_600_000;
+    getLogsFailure = (call) => (call.fromBlock === start + 1000 ? rateLimitError() : null);
+
+    await assert.rejects(
+      () => scan({ fromBlock: start, toBlock: start + 1999 }),
+      /could not coalesce error/
+    );
+
+    const throttledCalls = getLogsCalls.filter((call) => call.fromBlock === start + 1000);
+    assert.ok(throttledCalls.length > 1, "the throttled window was retried");
+    assert.ok(
+      throttledCalls.every((call) => call.toBlock === start + 1999),
+      "a throttled window is never shrunk"
+    );
+    assert.deepEqual(checkpointUpserts, [start + 999]);
+  });
+
+  test("consecutive windows are paced, and the last window is not followed by a pause", async () => {
+    env.INDEXER_MAX_BLOCK_RANGE = 1000;
+    const start = 8_700_000;
+
+    await scan({ fromBlock: start, toBlock: start + 2499 });
+
+    assert.equal(getLogsCalls.length, 3);
+    assert.equal(sleeps.length, 2, "one pause between each pair of windows");
+    assert.ok(sleeps.every((ms) => ms > 0));
+  });
+
+  test("a throttled block-timestamp read is retried, so the event keeps chain time", async () => {
+    const start = 8_800_000;
+    getBlockThrottles = 1;
+    logsToReturn = [
+      encodeLog(
+        "CampaignFunded",
+        [42n, ISSUER, ISSUER_APPROVER, RESOLVER, 1000n, 1, 1000n, 0n, 0n, "0x" + "ee".repeat(32)],
+        start + 1,
+        0
+      ),
+    ];
+
+    await scan({ fromBlock: start, toBlock: start + 5 });
+
+    const created = storedEvents[0] as { data: { blockTimestamp: Date | null } };
+    assert.deepEqual(created.data.blockTimestamp, new Date(1_700_000_000 * 1000));
+    assert.deepEqual(sleeps, [1000]);
   });
 
   test("a non-range error in a later window keeps the checkpoint and propagates", async () => {
