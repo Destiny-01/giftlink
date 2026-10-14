@@ -35,6 +35,8 @@ import { useWalletBalances } from "@/hooks/useWalletBalances";
 import { useAccount, useSwitchChain } from "wagmi";
 import { downloadRoster, saveRoster } from "@/lib/issuerRoster";
 import { ensureArcNetwork } from "@/lib/chainUtils";
+import * as api from "@/services/api";
+import { ApiError } from "@/lib/utils";
 import {
   useFundNomineCampaign,
   useNomineCampaigns,
@@ -79,6 +81,22 @@ function toUnix(value: string): number | null {
   return Number.isNaN(ts) ? null : ts;
 }
 
+/** "max_recipients" -> "Max recipients". The server owns the names; we only present them. */
+function humanizeLimitKey(key: string): string {
+  const spaced = key.replace(/[_-]+/g, " ").trim();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Known WP2 limit keys get a readable label; anything else falls back to the key itself. */
+const LIMIT_LABELS: Record<string, string> = {
+  maxBudgetUsdc: "Max budget (USDC)",
+  maxRecipients: "Max recipients",
+};
+
+function limitLabel(key: string): string {
+  return LIMIT_LABELS[key] ?? humanizeLimitKey(key);
+}
+
 export default function Studio() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -102,14 +120,60 @@ export default function Studio() {
   const [approver, setApprover] = useState("");
   const [selectedWallet, setSelectedWallet] = useState<string | undefined>();
   const [prepared, setPrepared] = useState<PrepareCampaignResponse | null>(null);
+  const [access, setAccess] = useState<"checking" | "allowed" | "denied">(
+    "checking"
+  );
+  const [limits, setLimits] = useState<Record<
+    string,
+    string | number | boolean | null
+  > | null>(null);
+  const [capMessage, setCapMessage] = useState<string | null>(null);
 
   const configured = isClaimCoreConfigured();
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
-      navigate("/app");
+      navigate("/app?next=/studio");
     }
   }, [isAuthLoading, isAuthenticated, navigate]);
+
+  // Studio access and pilot limits (WP2). An unreachable access endpoint shows the form: the
+  // backend still enforces access at prepare time.
+  useEffect(() => {
+    if (isAuthLoading || !isAuthenticated) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const result = await api.getStudioAccess();
+        if (!cancelled) setAccess(result.allowed ? "allowed" : "denied");
+      } catch {
+        if (!cancelled) setAccess("allowed");
+      }
+    })();
+
+    (async () => {
+      try {
+        const cfg = await api.getNomineConfig();
+        const entries = Object.entries(cfg.limits ?? {});
+        if (!cancelled) setLimits(entries.length > 0 ? cfg.limits ?? null : null);
+      } catch {
+        if (!cancelled) setLimits(null);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthLoading, isAuthenticated]);
+
+  // Only the limits the server actually set are shown; unset (null) keys are skipped.
+  const limitRows: Array<[string, string | number | boolean]> = limits
+    ? Object.entries(limits).filter(
+        (entry): entry is [string, string | number | boolean] =>
+          entry[1] !== null && entry[1] !== undefined
+      )
+    : [];
 
   type WalletBalance = (typeof walletBalances)[number];
 
@@ -162,6 +226,8 @@ export default function Studio() {
       return;
     }
 
+    setCapMessage(null);
+
     try {
       const result = await prepare({
         allocation: allocationBaseUnits.toString(),
@@ -176,6 +242,18 @@ export default function Studio() {
       saveRoster(result.campaignId, result.mapping);
       toast({ title: "Draft prepared", description: "Review the immutable terms before funding" });
     } catch (error: unknown) {
+      // The backend is the authority on access; map its refusals to the same surfaces.
+      const code = error instanceof ApiError ? error.code : undefined;
+      if (code === "issuer_not_allowlisted") {
+        setAccess("denied");
+        return;
+      }
+      if (code === "campaign_cap_exceeded") {
+        setCapMessage(
+          error instanceof Error ? error.message : "Campaign limit reached"
+        );
+        return;
+      }
       toast({
         title: "Could not prepare campaign",
         description: error instanceof Error ? error.message : "Please try again",
@@ -249,9 +327,9 @@ export default function Studio() {
   return (
     <MainLayout>
       <div className="container mx-auto max-w-4xl px-4 py-8">
-        <Button variant="ghost" className="mb-6" onClick={() => navigate("/dashboard")}>
+        <Button variant="ghost" className="mb-6" onClick={() => navigate("/inbox")}>
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
+          Back to Inbox
         </Button>
 
         <div className="mb-6">
@@ -268,7 +346,23 @@ export default function Studio() {
           </NomineDisclosure>
         ) : null}
 
-        {prepared ? (
+        {access === "denied" ? (
+          // ------ Invite-only pilot ------
+          <Card className="mb-8 border border-border bg-card p-6">
+            <h2 className="font-display text-xl font-semibold">
+              Studio is invite-only during the pilot
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Nomine is onboarding issuers one at a time. To run a campaign, reach
+              out to @usenomine on X.
+            </p>
+          </Card>
+        ) : access === "checking" ? (
+          <Card className="mb-8 flex items-center gap-2 border border-border bg-card p-6 text-sm text-muted-foreground">
+            <Spinner className="h-4 w-4 text-accent" />
+            Checking Studio access…
+          </Card>
+        ) : prepared ? (
           // ------ Review immutable terms ------
           <Card className="mb-8 border border-border bg-card p-6">
             <div className="mb-4 flex items-center gap-2">
@@ -396,6 +490,23 @@ export default function Studio() {
                 </p>
               </div>
 
+              {limitRows.length > 0 ? (
+                <div className="rounded-lg border border-border bg-surface/50 p-4 text-sm">
+                  <p className="font-medium">Pilot limits</p>
+                  <dl className="mt-2 space-y-1">
+                    {limitRows.map(([key, value]) => (
+                      <div
+                        key={key}
+                        className="flex items-baseline justify-between gap-4 text-muted-foreground"
+                      >
+                        <dt>{limitLabel(key)}</dt>
+                        <dd className="font-mono text-foreground">{String(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ) : null}
+
               <NomineDisclosure title="Eligibility">{ELIGIBILITY_NOTICE}</NomineDisclosure>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -442,6 +553,10 @@ export default function Studio() {
                     mono
                   />
                 </div>
+              ) : null}
+
+              {capMessage ? (
+                <p className="text-sm text-danger">{capMessage}</p>
               ) : null}
 
               <Button

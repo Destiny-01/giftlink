@@ -67,3 +67,22 @@ export function formatTimestampWithTimezone(ts?: number | null): string {
 
   return `${local} (${offset})`;
 }
+
+/**
+ * Absolute unix-seconds consent deadline, never later than the campaign expiry.
+ *
+ * The default window is 24 hours: the pilot's issuer approval is a manual step (D-019), so a
+ * one-hour window could lapse before the issuer confirms the claimant's wallet. The result is
+ * still capped at the campaign expiry, and an explicit window is respected.
+ */
+export function defaultConsentDeadline(
+  expiryTime?: number | null,
+  windowSeconds = 86400
+): number {
+  const now = Math.floor(Date.now() / 1000);
+  const proposed = now + windowSeconds;
+  if (expiryTime && expiryTime > 0) {
+    return Math.min(proposed, expiryTime);
+  }
+  return proposed;
+}

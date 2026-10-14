@@ -224,17 +224,6 @@ export function useAuth() {
     }
   };
 
-  const signInWithOAuth = async (provider: "x" | "discord") => {
-    try {
-      // Sign in with specific OAuth provider - opens Privy's login modal
-      await login();
-      // Note: Privy's login() shows all methods, but users can select their preferred OAuth
-    } catch (error) {
-      console.error(`Failed to sign in with ${provider}:`, error instanceof Error ? error.message : "Unknown error");
-      throw error;
-    }
-  };
-
   const logout = async () => {
     try {
       // Disconnect all Wagmi wallet connections before logging out
@@ -298,7 +287,6 @@ export function useAuth() {
     isLoading: !ready,
     connectWallet,
     signInWithEmail,
-    signInWithOAuth,
     logout,
     linkAccount,
     syncWithBackend,

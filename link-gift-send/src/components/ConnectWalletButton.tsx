@@ -15,6 +15,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 import { Link } from "react-router-dom";
+import { features } from "@/config/network";
 
 export function ConnectWalletButton() {
   const { user, isAuthenticated, connectWallet, logout } = useAuth();
@@ -60,14 +61,19 @@ export function ConnectWalletButton() {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link to="/dashboard">Dashboard</Link>
+          <Link to="/inbox">Inbox</Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link to="/settings">
-            <Settings className="mr-2 h-4 w-4" />
-            Settings
-          </Link>
+          <Link to="/studio">Studio</Link>
         </DropdownMenuItem>
+        {features.legacyGiftLink && (
+          <DropdownMenuItem asChild>
+            <Link to="/settings">
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={logout} className="text-danger">
           <LogOut className="mr-2 h-4 w-4" />

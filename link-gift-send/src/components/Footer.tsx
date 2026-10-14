@@ -22,10 +22,10 @@ export function Footer() {
 
           <nav aria-label="Footer" className="flex flex-col gap-3 text-sm sm:items-end">
             <Link
-              to="/app"
+              to="/app?next=/inbox"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >
-              GiftLink by Nomine
+              Open Inbox
             </Link>
             <a
               href="https://github.com/Destiny-01/giftlink"
@@ -40,14 +40,7 @@ export function Footer() {
 
         <div className="mt-8 space-y-1 border-t border-border pt-6 text-xs text-muted-foreground">
           <p>© {new Date().getFullYear()} Nomine.</p>
-          <p>
-            Current proof scope: fixed-allocation USDC Claims on Arc. Nomine
-            Studio, Nomine Inbox and the new Claim Core are in development.
-          </p>
-          <p>
-            GiftLink by Nomine is the original gifting application and has not
-            migrated to the new Claim Core.
-          </p>
+          <p>GiftLink by Nomine is the gifting application that started this work.</p>
         </div>
       </div>
     </footer>

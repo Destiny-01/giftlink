@@ -202,7 +202,9 @@ export default function CampaignLink() {
               <Button
                 className="mt-4 w-full bg-accent text-accent-foreground hover:bg-accent/90"
                 size="lg"
-                onClick={() => navigate("/inbox")}
+                onClick={() =>
+                  navigate(`/app?next=/campaign/${encodeURIComponent(campaignId ?? "")}`)
+                }
               >
                 Sign in to claim
               </Button>

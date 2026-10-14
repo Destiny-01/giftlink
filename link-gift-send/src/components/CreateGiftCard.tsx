@@ -6,9 +6,15 @@ import { Gift, Users } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { features } from '@/config/network';
 
 export function CreateGiftCard() {
   const navigate = useNavigate();
+
+  // The legacy gifting entry points are switched off with the rest of the GiftLink MVP.
+  if (!features.legacyGiftLink) {
+    return null;
+  }
 
   return (
     <Card className="border border-white/[0.04] bg-gradient-to-br from-accent/5 to-accent-2/5 p-6">
