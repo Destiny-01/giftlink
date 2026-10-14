@@ -21,6 +21,21 @@ const envSchema = z.object({
    * `CLAIM_CORE_CONTRACT_ADDRESS ?? GIFTLINK_CONTRACT_ADDRESS` anywhere in this service.
    */
   CLAIM_CORE_CONTRACT_ADDRESS: z.string().regex(ethAddressRegex),
+  /**
+   * The block the configured Claim Core deployment was deployed at.
+   *
+   * Required, like the contract address: scanning a public RPC from block `0` is rejected
+   * outright by the network (it refuses an unbounded/oversized range), and guessing the
+   * deployment block would silently skip or re-read history. It is the floor of every scan,
+   * so a fresh checkpoint never starts below it.
+   */
+  CLAIM_CORE_DEPLOY_BLOCK: z.coerce.number().int().nonnegative(),
+  /**
+   * The largest block range one log query may span. The indexer starts each pass at this
+   * width and halves it on a range/size rejection, so a network with a tighter cap than the
+   * default still converges instead of failing the pass.
+   */
+  INDEXER_MAX_BLOCK_RANGE: z.coerce.number().int().positive().default(10000),
   USDC_CONTRACT_ADDRESS: z.string().regex(ethAddressRegex),
   CHAIN_ID: z.coerce.number(),
   BACKEND_SIGNER_PRIVATE_KEY: z.string().regex(hexStringRegex),
