@@ -8,66 +8,76 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createConfig, http } from "wagmi";
-import { defineChain } from "viem";
 import App from "./App.tsx";
+import { configErrors, network, viemChain } from "./config/network";
 import "./index.css";
 
 const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID || "";
 
-// Define Arc Network chain (chain ID 1243)
-const arc = defineChain({
-  id: parseInt(import.meta.env.VITE_ARC_CHAIN_ID || "1243", 10),
-  name: "Arc Network",
-  nativeCurrency: {
-    decimals: 18,
-    name: "USDC",
-    symbol: "USDC",
-  },
-  rpcUrls: {
-    default: {
-      http: [
-        import.meta.env.VITE_ARC_RPC_URL || "https://rpc.testnet.arc.network",
-      ],
+const root = createRoot(document.getElementById("root")!);
+
+if (configErrors.length > 0) {
+  // Fail closed: never mount Privy, wagmi or the app against a partial configuration.
+  root.render(
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: "1rem",
+        padding: "2rem",
+        background: "#0B0B0D",
+        color: "#F3F0E9",
+        fontFamily: "Instrument Sans, system-ui, sans-serif",
+      }}
+    >
+      <h1 style={{ fontSize: "1.5rem", fontWeight: 600 }}>
+        Configuration error
+      </h1>
+      <p style={{ color: "#B9B6B0", maxWidth: "32rem", textAlign: "center" }}>
+        This deployment is missing required network configuration. Set the
+        following environment variables and rebuild:
+      </p>
+      <ul style={{ fontFamily: "monospace", listStyle: "none", padding: 0 }}>
+        {configErrors.map((name) => (
+          <li key={name}>{name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+} else {
+  // Wagmi config for the configured Arc network.
+  const wagmiConfig = createConfig({
+    chains: [viemChain],
+    transports: {
+      [viemChain.id]: http(network.rpcUrl),
     },
-  },
-  blockExplorers: {
-    default: {
-      name: "Arc Explorer",
-      url: "https://testnet.arcscan.app",
-    },
-  },
-});
+  });
 
-// Wagmi config for Arc Network
-const wagmiConfig = createConfig({
-  chains: [arc],
+  const queryClient = new QueryClient();
 
-  transports: {
-    [arc.id]: http(
-      import.meta.env.VITE_ARC_RPC_URL || "https://rpc.testnet.arc.network"
-    ),
-  },
-});
-
-const queryClient = new QueryClient();
-
-createRoot(document.getElementById("root")!).render(
-  <PrivyProvider
-    appId={PRIVY_APP_ID}
-    config={{
-      loginMethods: ["wallet", "email", "twitter", "discord"],
-      appearance: {
-        theme: "dark",
-        accentColor: "#5546D9",
-      },
-      supportedChains: [arc],
-      defaultChain: arc,
-    }}
-  >
-    <WagmiProvider config={wagmiConfig}>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </WagmiProvider>
-  </PrivyProvider>
-);
+  root.render(
+    <PrivyProvider
+      appId={PRIVY_APP_ID}
+      config={{
+        // The V1 Gate is verified email; X and Discord logins would produce accounts with
+        // no email and an empty Inbox.
+        loginMethods: ["email", "wallet"],
+        appearance: {
+          theme: "dark",
+          accentColor: "#5546D9",
+        },
+        supportedChains: [viemChain],
+        defaultChain: viemChain,
+      }}
+    >
+      <WagmiProvider config={wagmiConfig}>
+        <QueryClientProvider client={queryClient}>
+          <App />
+        </QueryClientProvider>
+      </WagmiProvider>
+    </PrivyProvider>
+  );
+}
