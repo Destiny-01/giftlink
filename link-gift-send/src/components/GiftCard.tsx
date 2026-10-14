@@ -16,6 +16,7 @@ import {
 import { StatusBadge } from "./StatusBadge";
 import { Badge } from "@/components/ui/badge";
 import { useClipboard } from "@/hooks/useClipboard";
+import { explorerTxUrl } from "@/lib/claimCore";
 import type { Gift } from "@/types/gift";
 
 interface GiftCardProps {
@@ -142,7 +143,7 @@ export function GiftCard({ gift, onRevoke, onEdit, onClick }: GiftCardProps) {
             {gift.claimTxHash && (
               <DropdownMenuItem asChild>
                 <a
-                  href={`https://testnet.arcscan.app/tx/${gift.claimTxHash}`}
+                  href={explorerTxUrl(gift.claimTxHash) ?? "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                 >

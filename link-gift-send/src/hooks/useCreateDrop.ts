@@ -9,6 +9,7 @@ import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { parseUnits, encodeFunctionData, parseEventLogs } from "viem";
 import { GiftLinkABI } from "@/lib/abi";
 import * as api from "@/services/api";
+import { network } from "@/config/network";
 import type {
   PrepareDropResponse,
   RelayClaimResponse,
@@ -145,8 +146,7 @@ export function useCreateDrop() {
         let onchainDropId: bigint;
 
         // Step 2: USDC-only flow with gas tank
-        const tokenAddress = import.meta.env
-          .VITE_USDC_CONTRACT_ADDRESS as `0x${string}`;
+        const tokenAddress = network.usdcAddress;
         const amountWei = parseUnits(payload.amount, payload.tokenDecimals);
         // Backend returns gasTankAmount in wei format (6 decimals for USDC ERC-20)
         const gasTankAmountWei = BigInt(gasTankAmount as `0x${string}`);

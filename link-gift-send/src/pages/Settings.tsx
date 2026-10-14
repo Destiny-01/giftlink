@@ -33,9 +33,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useClipboard } from "@/hooks/useClipboard";
 import { parseUnits, encodeFunctionData } from "viem";
 import { ERC20BalanceABI } from "@/lib/abi";
+import { network } from "@/config/network";
 
-const USDC_CONTRACT_ADDRESS = (import.meta.env.VITE_USDC_CONTRACT_ADDRESS ||
-  "0x0000000000000000000000000000000000000000") as `0x${string}`;
+const USDC_CONTRACT_ADDRESS = network.usdcAddress;
 
 const USDC_DECIMALS = 6;
 

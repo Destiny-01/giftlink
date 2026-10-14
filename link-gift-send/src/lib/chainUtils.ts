@@ -4,33 +4,12 @@
  */
 
 import { toast } from "@/hooks/use-toast";
-import { defineChain } from "viem";
+import { network, viemChain } from "@/config/network";
 
-const ARC_CHAIN_ID = parseInt(import.meta.env.VITE_ARC_CHAIN_ID || "1243", 10);
+const ARC_CHAIN_ID = network.chainId;
 
-// Arc Network chain definition (same as in main.tsx)
-export const arcChain = defineChain({
-  id: ARC_CHAIN_ID,
-  name: "Arc Testnet Network",
-  nativeCurrency: {
-    decimals: 18,
-    name: "USDC",
-    symbol: "USDC",
-  },
-  rpcUrls: {
-    default: {
-      http: [
-        import.meta.env.VITE_ARC_RPC_URL || "https://rpc.testnet.arc.network",
-      ],
-    },
-  },
-  blockExplorers: {
-    default: {
-      name: "Arc Explorer",
-      url: "https://testnet.arcscan.app",
-    },
-  },
-});
+// The single, env-driven Arc chain definition (see src/config/network.ts).
+export const arcChain = viemChain;
 
 /**
  * Wait for chain to switch by polling the current chainId
@@ -112,16 +91,14 @@ export async function ensureArcNetwork(
     // First, try to add the chain (this is safe even if already added)
     const chainParams = {
       chainId: `0x${ARC_CHAIN_ID.toString(16)}`,
-      chainName: "Arc Testnet Network",
+      chainName: network.name,
       nativeCurrency: {
         name: "USDC",
         symbol: "USDC",
         decimals: 18,
       },
-      rpcUrls: [
-        import.meta.env.VITE_ARC_RPC_URL || "https://rpc.testnet.arc.network",
-      ],
-      blockExplorerUrls: ["https://testnet.arcscan.app"],
+      rpcUrls: [network.rpcUrl],
+      blockExplorerUrls: [network.explorerUrl],
     };
 
     // Try adding the chain first (if not already added)

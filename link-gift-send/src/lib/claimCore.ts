@@ -17,6 +17,7 @@ import {
   type TypedDataDomain,
 } from "viem";
 import { claimCoreAbi } from "@/lib/claimCoreAbi";
+import { network } from "@/config/network";
 
 // ---------------------------------------------------------------------------
 // Deployment constants (spec §1)
@@ -25,21 +26,19 @@ import { claimCoreAbi } from "@/lib/claimCoreAbi";
 export const CLAIM_CORE_DOMAIN_NAME = "NomineClaimCore";
 export const CLAIM_CORE_DOMAIN_VERSION = "1";
 
-export const CLAIM_CORE_CHAIN_ID = Number(
-  import.meta.env.VITE_ARC_CHAIN_ID || 5042002
-);
+// All chain-derived values come from the single env-driven network config. There is no fallback:
+// when the configuration is incomplete, `main.tsx` refuses to mount the app before any of these
+// are used.
+export const CLAIM_CORE_CHAIN_ID = network.chainId;
 
-export const CLAIM_CORE_EXPLORER_URL =
-  (import.meta.env.VITE_ARC_EXPLORER_URL as string) ||
-  "https://explorer.testnet.arc.io";
+export const CLAIM_CORE_EXPLORER_URL = network.explorerUrl;
 
 // USDC_DECIMALS and the amount/timestamp formatters live in `./format`, which is free of
 // `import.meta.env` and project aliases so a plain runtime test can execute them. They are
 // re-exported below, so existing importers of this module keep working unchanged.
 
-/** Arc testnet USDC ERC-20 interface (spec §1). */
-export const USDC_ADDRESS = ((import.meta.env.VITE_USDC_CONTRACT_ADDRESS as string) ||
-  "0x3600000000000000000000000000000000000000") as `0x${string}`;
+/** USDC ERC-20 interface (spec §1). */
+export const USDC_ADDRESS = network.usdcAddress;
 
 // ---------------------------------------------------------------------------
 // Config (fails closed)
@@ -64,7 +63,7 @@ export interface ClaimCoreConfig {
  * when it is missing or malformed we throw instead of pointing at a legacy contract.
  */
 export function getClaimCoreConfig(): ClaimCoreConfig {
-  const address = import.meta.env.VITE_CLAIM_CORE_ADDRESS as string | undefined;
+  const address = network.claimCoreAddress;
 
   if (!address || !isAddress(address) || address === zeroAddress) {
     throw new ClaimCoreNotConfiguredError(
@@ -73,7 +72,7 @@ export function getClaimCoreConfig(): ClaimCoreConfig {
   }
 
   return {
-    address: address as `0x${string}`,
+    address,
     chainId: CLAIM_CORE_CHAIN_ID,
     usdcAddress: USDC_ADDRESS,
     explorerUrl: CLAIM_CORE_EXPLORER_URL,

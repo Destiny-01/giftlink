@@ -18,6 +18,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { MainLayout } from "@/components/MainLayout";
+import { TestnetPill } from "@/components/TestnetPill";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -166,6 +167,7 @@ export default function StudioCampaign() {
             <p className="mt-1 font-mono text-sm text-muted-foreground">{campaign.id}</p>
           </div>
           <div className="flex items-center gap-3">
+            <TestnetPill label="Test USDC · Arc Testnet" />
             <NomineStatusBadge kind="campaign" value={campaign.status} />
             <Button variant="outline" size="sm" onClick={() => refresh()}>
               <RefreshCw className="mr-2 h-4 w-4" />

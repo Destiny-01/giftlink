@@ -4,6 +4,7 @@
 
 import { Link } from 'react-router-dom';
 import { ConnectWalletButton } from './ConnectWalletButton';
+import { TestnetPill } from './TestnetPill';
 
 export function Header() {
   return (
@@ -32,6 +33,7 @@ export function Header() {
           </Link>
 
           <nav aria-label="Main" className="flex items-center gap-4">
+            <TestnetPill />
             <Link
               to="/app"
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"

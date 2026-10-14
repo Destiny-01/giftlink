@@ -16,6 +16,7 @@ import { useWallets } from "@privy-io/react-auth";
 import { useConfetti } from "@/hooks/useConfetti";
 import { FullPageLoader, Spinner } from "@/components/Loader";
 import { toast } from "@/hooks/use-toast";
+import { explorerTxUrl } from "@/lib/claimCore";
 import type { Gift } from "@/types/gift";
 
 export default function Claim() {
@@ -157,7 +158,7 @@ export default function Claim() {
                 : "This gift has already been claimed"}
               {gift.claimTxHash && (
                 <a
-                  href={`https://testnet.arcscan.app/tx/${gift.claimTxHash}`}
+                  href={explorerTxUrl(gift.claimTxHash) ?? "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="ml-2 inline-flex items-center gap-1 text-accent hover:underline"
@@ -350,7 +351,7 @@ export default function Claim() {
                   </p>
                   {gift.claimTxHash && (
                     <a
-                      href={`https://testnet.arcscan.app/tx/${gift.claimTxHash}`}
+                      href={explorerTxUrl(gift.claimTxHash) ?? "#"}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="mt-2 inline-flex items-center gap-1 text-sm text-accent hover:underline"

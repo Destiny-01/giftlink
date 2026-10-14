@@ -30,6 +30,7 @@ import { WalletSelector } from "@/components/WalletSelector";
 import { useAccount, useSwitchChain } from "wagmi";
 import { useWallets } from "@privy-io/react-auth";
 import { ensureArcNetwork } from "@/lib/chainUtils";
+import { network } from "@/config/network";
 import {
   Dialog,
   DialogContent,
@@ -41,7 +42,7 @@ import { Spinner } from "@/components/Loader";
 import type { RecipientType } from "@/types/gift";
 import { formatUnits } from "viem";
 
-const ARC_CHAIN_ID = parseInt(import.meta.env.VITE_ARC_CHAIN_ID || "1243", 10);
+const ARC_CHAIN_ID = network.chainId;
 
 export default function Create() {
   const navigate = useNavigate();
@@ -202,8 +203,7 @@ export default function Create() {
     // USDC contract details
     // NOTE: USDC ERC-20 interface uses 6 decimals per Arc Network docs
     // https://docs.arc.network/arc/references/contract-addresses
-    const USDC_CONTRACT_ADDRESS = (import.meta.env.VITE_USDC_CONTRACT_ADDRESS ||
-      "0x") as `0x${string}`;
+    const USDC_CONTRACT_ADDRESS = network.usdcAddress;
     const USDC_DECIMALS = 6;
     const USDC_SYMBOL = "USDC";
 
@@ -312,8 +312,7 @@ export default function Create() {
       const expiry = Math.floor(expiryDate.getTime() / 1000);
 
       // USDC contract details
-      const USDC_CONTRACT_ADDRESS = (import.meta.env
-        .VITE_USDC_CONTRACT_ADDRESS || "0x") as `0x${string}`;
+      const USDC_CONTRACT_ADDRESS = network.usdcAddress;
       const USDC_DECIMALS = 6;
       const USDC_SYMBOL = "USDC";
 

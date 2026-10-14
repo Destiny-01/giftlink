@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { FullPageLoader, Spinner } from "@/components/Loader";
 import { WalletSelector } from "@/components/WalletSelector";
+import { TestnetPill } from "@/components/TestnetPill";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
@@ -85,8 +86,11 @@ function EntitlementCard({
     <Card className="border border-border bg-card p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="font-medium">
-            {campaign?.issuerName || "Campaign"} · {formatUsdcDisplay(entitlement.amount)}
+          <div className="flex items-center gap-2 font-medium">
+            <span>
+              {campaign?.issuerName || "Campaign"} · {formatUsdcDisplay(entitlement.amount)}
+            </span>
+            <TestnetPill label="Test USDC · Arc Testnet" />
           </div>
           <div className="text-xs text-muted-foreground">
             From <span className="font-mono">{campaign?.issuer}</span>

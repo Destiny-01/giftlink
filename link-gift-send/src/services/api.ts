@@ -40,8 +40,9 @@ import type {
   WorkflowState,
 } from "@/types/nomine";
 import { ApiError, normalizeError, parseErrorResponse } from "@/lib/utils";
+import { network } from "@/config/network";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "https://api.giftlink.arc";
+const API_BASE_URL = network.apiUrl;
 
 // Global identity token getter - will be set by IdentityTokenProvider
 let getIdentityToken: (() => string | null) | null = null;

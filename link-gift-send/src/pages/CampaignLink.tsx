@@ -18,6 +18,7 @@ import {
   Users,
 } from "lucide-react";
 import { MainLayout } from "@/components/MainLayout";
+import { TestnetPill } from "@/components/TestnetPill";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FullPageLoader } from "@/components/Loader";
@@ -109,6 +110,7 @@ export default function CampaignLink() {
                 <span className="font-display text-lg font-semibold">
                   {formatUsdcDisplay(campaign.allocation)} per recipient
                 </span>
+                <TestnetPill label="Test USDC · Arc Testnet" />
               </div>
 
               <div className="space-y-2">

@@ -42,13 +42,26 @@ The app will be available at `http://localhost:8080`
 
 ## Environment Variables
 
+One switch, `VITE_ARC_NETWORK`, decides whether the build is testnet or mainnet. When any required
+variable is missing or invalid, the app renders a "Configuration error" screen listing the variable
+names and refuses to mount — it never falls back to a default network.
+
 Required:
 
-- `VITE_ARC_RPC_URL` - Arc Network RPC endpoint
-- `VITE_USDC_CONTRACT_ADDRESS` - USDC contract address
-- `VITE_PRIVY_APP_ID` - Privy app ID
+- `VITE_ARC_NETWORK` - `testnet` or `mainnet`; sets the chain ID (testnet `5042002`, mainnet `5042`).
+- `VITE_ARC_RPC_URL` - Arc JSON-RPC endpoint.
+- `VITE_ARC_EXPLORER_URL` - Block explorer base URL (a trailing slash is normalized away).
+- `VITE_API_URL` - Backend API base URL.
+- `VITE_CLAIM_CORE_ADDRESS` - Nomine Claim Core contract address (0x-address).
+- `VITE_USDC_CONTRACT_ADDRESS` - Arc USDC ERC-20 contract address (0x-address).
+- `VITE_PRIVY_APP_ID` - Privy app ID.
 
-See `.env.example` for all options.
+Optional:
+
+- `VITE_ARC_CHAIN_ID` - when set, must equal the selected network's chain ID.
+- `VITE_GIFTLINK_CONTRACT_ADDRESS` - legacy GiftLink drop contract address.
+
+See `.env.example` for a commented example.
 
 ## Building
 

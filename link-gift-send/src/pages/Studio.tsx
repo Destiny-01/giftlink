@@ -28,6 +28,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FullPageLoader, Spinner } from "@/components/Loader";
 import { WalletSelector } from "@/components/WalletSelector";
+import { TestnetPill } from "@/components/TestnetPill";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useWalletBalances } from "@/hooks/useWalletBalances";
@@ -367,6 +368,7 @@ export default function Studio() {
               <div className="space-y-2">
                 <Label className="flex items-center gap-2">
                   <Coins className="h-4 w-4" /> Allocation per recipient (USDC)
+                  <TestnetPill label="Test USDC · Arc Testnet" />
                 </Label>
                 <Input
                   type="number"
