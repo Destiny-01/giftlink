@@ -87,6 +87,16 @@ function humanizeLimitKey(key: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** Known WP2 limit keys get a readable label; anything else falls back to the key itself. */
+const LIMIT_LABELS: Record<string, string> = {
+  maxBudgetUsdc: "Max budget (USDC)",
+  maxRecipients: "Max recipients",
+};
+
+function limitLabel(key: string): string {
+  return LIMIT_LABELS[key] ?? humanizeLimitKey(key);
+}
+
 export default function Studio() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
@@ -115,7 +125,7 @@ export default function Studio() {
   );
   const [limits, setLimits] = useState<Record<
     string,
-    string | number | boolean
+    string | number | boolean | null
   > | null>(null);
   const [capMessage, setCapMessage] = useState<string | null>(null);
 
@@ -156,6 +166,14 @@ export default function Studio() {
       cancelled = true;
     };
   }, [isAuthLoading, isAuthenticated]);
+
+  // Only the limits the server actually set are shown; unset (null) keys are skipped.
+  const limitRows: Array<[string, string | number | boolean]> = limits
+    ? Object.entries(limits).filter(
+        (entry): entry is [string, string | number | boolean] =>
+          entry[1] !== null && entry[1] !== undefined
+      )
+    : [];
 
   type WalletBalance = (typeof walletBalances)[number];
 
@@ -472,16 +490,16 @@ export default function Studio() {
                 </p>
               </div>
 
-              {limits ? (
+              {limitRows.length > 0 ? (
                 <div className="rounded-lg border border-border bg-surface/50 p-4 text-sm">
                   <p className="font-medium">Pilot limits</p>
                   <dl className="mt-2 space-y-1">
-                    {Object.entries(limits).map(([key, value]) => (
+                    {limitRows.map(([key, value]) => (
                       <div
                         key={key}
                         className="flex items-baseline justify-between gap-4 text-muted-foreground"
                       >
-                        <dt>{humanizeLimitKey(key)}</dt>
+                        <dt>{limitLabel(key)}</dt>
                         <dd className="font-mono text-foreground">{String(value)}</dd>
                       </div>
                     ))}

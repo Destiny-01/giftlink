@@ -20,6 +20,7 @@ const TESTNET_ENV = {
   VITE_API_URL: "https://api.example.invalid",
   VITE_CLAIM_CORE_ADDRESS: "0x9D390dCa06118302C8194CC214Ed9BC7f5969810",
   VITE_USDC_CONTRACT_ADDRESS: "0x3600000000000000000000000000000000000000",
+  VITE_PRIVY_APP_ID: "test-privy-app-id",
 };
 
 const MAINNET_ENV = {
@@ -82,6 +83,13 @@ test("a missing VITE_ARC_NETWORK is an error", () => {
     withEnv({ VITE_ARC_NETWORK: undefined })
   );
   assert.ok(configErrors.includes("VITE_ARC_NETWORK"));
+});
+
+test("a missing VITE_PRIVY_APP_ID is an error", () => {
+  const { configErrors } = parseNetworkEnv(
+    withEnv({ VITE_PRIVY_APP_ID: undefined })
+  );
+  assert.ok(configErrors.includes("VITE_PRIVY_APP_ID"));
 });
 
 test("an explorer URL with a trailing slash is normalized", () => {

@@ -12,8 +12,6 @@ import App from "./App.tsx";
 import { configErrors, network, viemChain } from "./config/network";
 import "./index.css";
 
-const PRIVY_APP_ID = import.meta.env.VITE_PRIVY_APP_ID || "";
-
 const root = createRoot(document.getElementById("root")!);
 
 if (configErrors.length > 0) {
@@ -60,11 +58,17 @@ if (configErrors.length > 0) {
 
   root.render(
     <PrivyProvider
-      appId={PRIVY_APP_ID}
+      appId={network.privyAppId}
       config={{
         // The V1 Gate is verified email; X and Discord logins would produce accounts with
         // no email and an empty Inbox.
         loginMethods: ["email", "wallet"],
+        // The Gate is verified email, so an email-only claimant must still end up with a wallet
+        // to sign consent with. Creating the embedded wallet on login removes that dashboard
+        // dependency.
+        embeddedWallets: {
+          ethereum: { createOnLogin: "users-without-wallets" },
+        },
         appearance: {
           theme: "dark",
           accentColor: "#5546D9",

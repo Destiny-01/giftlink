@@ -1098,8 +1098,10 @@ export async function getStudioAccess(): Promise<StudioAccess> {
   }
 }
 
+export type NomineLimitValue = string | number | boolean | null;
+
 export interface NomineConfig {
-  limits?: Record<string, string | number | boolean>;
+  limits?: Record<string, NomineLimitValue>;
 }
 
 /** Public configuration. Only fields the server actually returns are passed through. */
@@ -1107,7 +1109,7 @@ export async function getNomineConfig(): Promise<NomineConfig> {
   try {
     const response = await fetchWithAuth("/api/config");
     const data = (await response.json()) as {
-      limits?: Record<string, string | number | boolean>;
+      limits?: Record<string, NomineLimitValue>;
     };
     return { limits: data.limits };
   } catch (error) {

@@ -23,6 +23,7 @@ export interface NetworkConfig {
   claimCoreAddress: `0x${string}`;
   usdcAddress: `0x${string}`;
   apiUrl: string;
+  privyAppId: string;
 }
 
 export interface ParsedNetworkEnv {
@@ -39,6 +40,7 @@ export interface NetworkEnv {
   VITE_API_URL?: string;
   VITE_CLAIM_CORE_ADDRESS?: string;
   VITE_USDC_CONTRACT_ADDRESS?: string;
+  VITE_PRIVY_APP_ID?: string;
   VITE_ENABLE_LEGACY_GIFTLINK?: string;
 }
 
@@ -104,6 +106,10 @@ export function parseNetworkEnv(env: NetworkEnv): ParsedNetworkEnv {
   const usdcAddress = read(env.VITE_USDC_CONTRACT_ADDRESS);
   if (!isUsableAddress(usdcAddress)) configErrors.push("VITE_USDC_CONTRACT_ADDRESS");
 
+  // An empty app ID makes Privy throw on mount and renders a blank page, so it fails closed here.
+  const privyAppId = read(env.VITE_PRIVY_APP_ID);
+  if (!privyAppId) configErrors.push("VITE_PRIVY_APP_ID");
+
   return {
     network: {
       name: facts.name,
@@ -114,6 +120,7 @@ export function parseNetworkEnv(env: NetworkEnv): ParsedNetworkEnv {
       claimCoreAddress: claimCoreAddress as `0x${string}`,
       usdcAddress: usdcAddress as `0x${string}`,
       apiUrl,
+      privyAppId,
     },
     configErrors,
   };
