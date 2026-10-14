@@ -9,7 +9,7 @@ import {
 import { ethers, JsonRpcProvider } from "ethers";
 import { randomUUID } from "crypto";
 import { prisma } from "../config/prisma";
-import { env } from "../config/env";
+import { env, legacyGiftLinkAddress } from "../config/env";
 import {
   ClaimConfirmRequest,
   ClaimPermitRequest,
@@ -371,7 +371,7 @@ export async function confirmDrop(
   await assertContractConfiguration(provider);
 
   const creation = await fetchVerifiedCreation(txHash, {
-    contractAddress: env.GIFTLINK_CONTRACT_ADDRESS,
+    contractAddress: legacyGiftLinkAddress(),
     onchainId: requestedOnchainId,
   });
 
@@ -597,7 +597,7 @@ export async function issueClaimPermit(
 
   const domain = CLAIM_PERMIT_DOMAIN(
     env.CHAIN_ID,
-    env.GIFTLINK_CONTRACT_ADDRESS,
+    legacyGiftLinkAddress(),
     env.EIP712_DOMAIN_NAME,
     env.EIP712_VERSION
   );
@@ -759,7 +759,7 @@ export async function relayClaim(
 
   const domain = CLAIM_PERMIT_DOMAIN(
     env.CHAIN_ID,
-    env.GIFTLINK_CONTRACT_ADDRESS,
+    legacyGiftLinkAddress(),
     env.EIP712_DOMAIN_NAME,
     env.EIP712_VERSION
   );
@@ -784,7 +784,7 @@ export async function relayClaim(
   }
 
   const contract = new Contract(
-    env.GIFTLINK_CONTRACT_ADDRESS,
+    legacyGiftLinkAddress(),
     GiftLinkABI,
     relayerWallet.connect(provider)
   );
@@ -857,7 +857,7 @@ export async function relayClaim(
 
   // 4. The settlement comes from the contract's own event, not from the receipt status.
   const facts = extractSettlement(receipt, {
-    contractAddress: env.GIFTLINK_CONTRACT_ADDRESS,
+    contractAddress: legacyGiftLinkAddress(),
     onchainId: drop.onchainId,
   });
 
@@ -1111,7 +1111,7 @@ export async function recordDropClaim(
   await assertContractConfiguration(provider);
 
   const facts = await fetchVerifiedSettlement(request.txHash, {
-    contractAddress: env.GIFTLINK_CONTRACT_ADDRESS,
+    contractAddress: legacyGiftLinkAddress(),
     onchainId: drop.onchainId,
   });
 
@@ -1166,7 +1166,7 @@ export async function recordDropRevocation(
 
   // The revocation is only real if the configured contract says so for this gift.
   const revocation = await fetchVerifiedRevocation(request.txHash, {
-    contractAddress: env.GIFTLINK_CONTRACT_ADDRESS,
+    contractAddress: legacyGiftLinkAddress(),
     onchainId: drop.onchainId,
   });
 

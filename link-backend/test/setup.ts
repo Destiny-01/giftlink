@@ -36,6 +36,13 @@ process.env.CLAIM_CORE_CONTRACT_ADDRESS = TEST_CLAIM_CORE_ADDRESS;
 process.env.CLAIM_CORE_DEPLOY_BLOCK = "64110120";
 process.env.USDC_CONTRACT_ADDRESS = TEST_USDC_ADDRESS;
 process.env.CHAIN_ID = String(TEST_CHAIN_ID);
+/**
+ * The suite runs against the synthetic chain id above, which is not an Arc network. The
+ * explicit network is still required, the test chain id is permitted only under
+ * `NODE_ENV=test`, and legacy support stays on so the existing legacy tests still run.
+ */
+process.env.ARC_NETWORK = "testnet";
+process.env.ENABLE_LEGACY_GIFTLINK = "true";
 process.env.BACKEND_SIGNER_PRIVATE_KEY = "0x" + "11".repeat(32);
 process.env.BACKEND_SIGNER_ADDRESS = backendSigner.address;
 process.env.RELAYER_PRIVATE_KEY = "0x" + "22".repeat(32);

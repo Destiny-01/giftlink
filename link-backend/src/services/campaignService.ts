@@ -27,6 +27,10 @@ import {
 import type { AuthenticatedUser } from "../middleware/auth";
 import { assertConfiguredNetwork, getBlockTimestamp } from "./chainEvidence";
 import {
+  assertCampaignWithinLimits,
+  assertIssuerAllowlisted,
+} from "./studioAccess";
+import {
   assertClaimCoreConfiguration,
   fetchVerifiedCampaignFunding,
   fetchVerifiedCampaignReclaim,
@@ -77,6 +81,7 @@ export async function prepareCampaign(
   authUser?: AuthenticatedUser
 ): Promise<PrepareCampaignResponse> {
   const issuerPrivyId = requirePrivyId(authUser);
+  assertIssuerAllowlisted(issuerPrivyId);
 
   const issuerAddress = authUser?.walletAddresses?.[0]?.toLowerCase();
   if (!issuerAddress) {
@@ -131,6 +136,8 @@ export async function prepareCampaign(
   if (assigned.size === 0) {
     throw new ValidationError("At least one recipient email is required");
   }
+
+  assertCampaignWithinLimits(assigned.size, allocation);
 
   const entitlements = [...assigned.entries()].map(([emailHash, entry]) => ({
     entitlementId: entry.entitlementId,

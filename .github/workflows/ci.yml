@@ -23,6 +23,8 @@ jobs:
       - run: yarn install --frozen-lockfile
       - run: yarn prisma:generate
       - run: yarn build
+      - run: yarn test
+      - run: yarn test:types
 
   frontend:
     name: Frontend
