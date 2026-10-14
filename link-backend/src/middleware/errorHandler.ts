@@ -32,6 +32,7 @@ export function errorHandler(
       error: {
         message: err.message,
         statusCode: err.statusCode,
+        ...(err.code ? { code: err.code } : {}),
       },
     });
   }

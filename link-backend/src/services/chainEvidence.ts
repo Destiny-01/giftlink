@@ -1,7 +1,7 @@
 import { Contract, JsonRpcProvider } from "ethers";
 import type { Log, TransactionReceipt } from "ethers";
 import type { Drop } from "@prisma/client";
-import { env } from "../config/env";
+import { env, legacyGiftLinkAddress } from "../config/env";
 import {
   GiftLinkABI,
   giftLinkInterface,
@@ -102,7 +102,7 @@ export async function assertContractConfiguration(
   }
 
   const contract = new Contract(
-    env.GIFTLINK_CONTRACT_ADDRESS,
+    legacyGiftLinkAddress(),
     GiftLinkABI,
     provider
   );
@@ -114,7 +114,7 @@ export async function assertContractConfiguration(
     signerAddress = String(await contract.backendSigner());
   } catch (error) {
     throw new ConfigurationError(
-      `The configured contract at ${env.GIFTLINK_CONTRACT_ADDRESS} does not answer USDC()/backendSigner(). ` +
+      `The configured contract at ${legacyGiftLinkAddress()} does not answer USDC()/backendSigner(). ` +
         "It is probably a different contract generation than link-backend/contracts/GiftLink.sol, or the address/network is wrong. " +
         "Refusing to authorize anything against it."
     );
@@ -122,14 +122,14 @@ export async function assertContractConfiguration(
 
   if (normalizeAddress(usdcAddress) !== normalizeAddress(env.USDC_CONTRACT_ADDRESS)) {
     throw new ConfigurationError(
-      `Deployment mismatch: contract ${env.GIFTLINK_CONTRACT_ADDRESS} settles ${usdcAddress}, ` +
+      `Deployment mismatch: contract ${legacyGiftLinkAddress()} settles ${usdcAddress}, ` +
         `but USDC_CONTRACT_ADDRESS is ${env.USDC_CONTRACT_ADDRESS}. Refusing to authorize settlements.`
     );
   }
 
   if (normalizeAddress(signerAddress) !== normalizeAddress(backendSigner.address)) {
     throw new ConfigurationError(
-      `Deployment mismatch: contract ${env.GIFTLINK_CONTRACT_ADDRESS} trusts backend signer ${signerAddress}, ` +
+      `Deployment mismatch: contract ${legacyGiftLinkAddress()} trusts backend signer ${signerAddress}, ` +
         `but this service signs with ${backendSigner.address}. Permits it issues would be rejected. Refusing to sign.`
     );
   }
@@ -188,7 +188,7 @@ export async function readGift(
   provider: JsonRpcProvider = getRpcProvider()
 ): Promise<OnchainGiftView> {
   const contract = new Contract(
-    env.GIFTLINK_CONTRACT_ADDRESS,
+    legacyGiftLinkAddress(),
     GiftLinkABI,
     provider
   );
@@ -199,7 +199,7 @@ export async function readGift(
   } catch (error) {
     throw new ConfigurationError(
       `Unable to read gift ${onchainId.toString()} from the configured contract ` +
-        `${env.GIFTLINK_CONTRACT_ADDRESS}. Refusing to proceed against unverifiable chain state.`
+        `${legacyGiftLinkAddress()}. Refusing to proceed against unverifiable chain state.`
     );
   }
 
@@ -320,7 +320,7 @@ export async function findSettlementForGift(
   fromBlock = 0
 ): Promise<SettlementFacts | null> {
   const contract = new Contract(
-    env.GIFTLINK_CONTRACT_ADDRESS,
+    legacyGiftLinkAddress(),
     GiftLinkABI,
     provider
   );
@@ -364,7 +364,7 @@ export async function findSettlementForGift(
       blockNumber: logs[0].blockNumber,
       logs: logs.filter((log) => log.transactionHash === txHash),
     } as unknown as TransactionReceipt,
-    { contractAddress: env.GIFTLINK_CONTRACT_ADDRESS, onchainId }
+    { contractAddress: legacyGiftLinkAddress(), onchainId }
   );
 }
 

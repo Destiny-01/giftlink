@@ -1,6 +1,6 @@
 import { CronJob } from "cron";
 import { prisma } from "../config/prisma";
-import { env } from "../config/env";
+import { legacyGiftLinkAddress } from "../config/env";
 import { DropEventType, DropStatus } from "@prisma/client";
 import { logger } from "../config/logger";
 import { errorDiagnostics } from "../utils/safeLog";
@@ -46,7 +46,7 @@ export const syncDropsJob = new CronJob("*/5 * * * *", async () => {
 
       try {
         const creation = await fetchVerifiedCreation(drop.creationTxHash, {
-          contractAddress: env.GIFTLINK_CONTRACT_ADDRESS,
+          contractAddress: legacyGiftLinkAddress(),
         });
 
         if (
