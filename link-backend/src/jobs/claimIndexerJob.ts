@@ -17,31 +17,69 @@ import { assertClaimCoreConfiguration } from "../services/claimCoreEvidence";
  *
  * The checkpoint makes a restart safe: a pass that dies mid-way simply resumes from the last
  * recorded block, and every write is guarded so re-scanning is a no-op.
+ *
+ * Passes are single-flight. A catch-up over millions of blocks can outlast the one-minute cron
+ * interval, and two overlapping passes would race on the same checkpoint and replay; a tick that
+ * arrives while a pass is still running is skipped (logged at `debug`) rather than started.
  */
-export const claimIndexerJob = new CronJob("*/1 * * * *", async () => {
-  try {
-    const provider = getRpcProvider();
-    await assertClaimCoreConfiguration(provider);
 
-    const { scan, replay } = await runClaimIndexerOnce({ provider });
-    if (
-      scan.stored > 0 ||
-      replay.funded > 0 ||
-      replay.settled > 0 ||
-      replay.reclaimed > 0
-    ) {
-      logger.info(
-        { operation: "claimIndexerJob", outcome: "synced", ...scan, ...replay },
-        "Claim Core events indexed"
-      );
-    }
+/** The work one pass performs: verify the deployment, scan the chain, then replay. */
+async function executeClaimIndexerPass(): Promise<void> {
+  const provider = getRpcProvider();
+  await assertClaimCoreConfiguration(provider);
+
+  const { scan, replay } = await runClaimIndexerOnce({ provider });
+  if (
+    scan.stored > 0 ||
+    replay.funded > 0 ||
+    replay.settled > 0 ||
+    replay.reclaimed > 0
+  ) {
+    logger.info(
+      { operation: "claimIndexerJob", outcome: "synced", ...scan, ...replay },
+      "Claim Core events indexed"
+    );
+  }
+}
+
+let passInFlight = false;
+
+/**
+ * Runs one indexer pass unless one is already in flight, returning whether a pass actually ran.
+ *
+ * The guard is a module-level flag rather than a database lease because the only caller is this
+ * process's cron, so an in-process flag is the whole of the concurrency to exclude. A failing pass is
+ * logged and swallowed so one transient RPC error cannot kill the worker.
+ */
+export async function runClaimIndexerPass(
+  pass: () => Promise<void> = executeClaimIndexerPass
+): Promise<boolean> {
+  if (passInFlight) {
+    logger.debug(
+      { operation: "claimIndexerJob", outcome: "skipped" },
+      "Claim Core indexer pass already in flight; skipping this tick"
+    );
+    return false;
+  }
+
+  passInFlight = true;
+  try {
+    await pass();
+    return true;
   } catch (error) {
     logger.error({
       operation: "claimIndexerJob",
       outcome: "failure",
       ...errorDiagnostics(error),
     });
+    return false;
+  } finally {
+    passInFlight = false;
   }
+}
+
+export const claimIndexerJob = new CronJob("*/1 * * * *", async () => {
+  await runClaimIndexerPass();
 });
 
 export function startClaimIndexerJob() {

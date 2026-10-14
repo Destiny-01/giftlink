@@ -29,6 +29,11 @@ process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/giftlink_test"
 process.env.RPC_URL = "http://127.0.0.1:8545";
 process.env.GIFTLINK_CONTRACT_ADDRESS = TEST_CONTRACT_ADDRESS;
 process.env.CLAIM_CORE_CONTRACT_ADDRESS = TEST_CLAIM_CORE_ADDRESS;
+/**
+ * The block the (synthetic) Claim Core deployment was created at. The Arc testnet value is
+ * used so the indexer tests exercise a realistic, non-zero scan floor.
+ */
+process.env.CLAIM_CORE_DEPLOY_BLOCK = "64110120";
 process.env.USDC_CONTRACT_ADDRESS = TEST_USDC_ADDRESS;
 process.env.CHAIN_ID = String(TEST_CHAIN_ID);
 process.env.BACKEND_SIGNER_PRIVATE_KEY = "0x" + "11".repeat(32);

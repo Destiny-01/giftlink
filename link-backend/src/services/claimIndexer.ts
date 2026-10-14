@@ -1,12 +1,11 @@
 import type { JsonRpcProvider } from "ethers";
-import { Contract } from "ethers";
 import { CampaignStatus, ClaimEventType, ClaimRequestStatus } from "@prisma/client";
 import type { ClaimEvent } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../config/prisma";
 import { env } from "../config/env";
 import { getRpcProvider } from "../config/arcClient";
-import { nomineClaimCoreInterface } from "../config/claimCoreAbi";
+import { CLAIM_CORE_EVENTS, nomineClaimCoreInterface } from "../config/claimCoreAbi";
 import { logger } from "../config/logger";
 import { errorDiagnostics } from "../utils/safeLog";
 import { getBlockTimestamp } from "./chainEvidence";
@@ -30,6 +29,71 @@ function isUniqueViolation(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === "P2002";
 }
 
+/** The smallest window the adaptive scan will try; a rejection below this aborts the pass. */
+const MIN_WINDOW_SIZE = 100;
+/** A pass stops starting new windows after this long and resumes from the checkpoint next pass. */
+const PASS_TIME_BUDGET_MS = 4 * 60 * 1000;
+
+/**
+ * The only event names `storeClaimEvent` knows how to persist. A window query returns *every*
+ * log the contract emitted, so anything else (for example `EIP712DomainChanged`) must be
+ * discarded before its decoded args are read - the canonical events carry `campaignId`, the
+ * others do not.
+ */
+const CANONICAL_EVENT_NAMES = new Set<string>(Object.values(CLAIM_CORE_EVENTS));
+
+/**
+ * Whether an RPC failure looks like the node refusing a block range rather than a transient
+ * or authorization problem.
+ *
+ * Only a range/size rejection is worth retrying with a smaller window. Shrinking on anything
+ * else would silently mask a real failure (bad auth, a dead endpoint) behind a storm of extra
+ * requests, so the two are deliberately kept apart.
+ */
+function isRangeOrSizeError(error: unknown): boolean {
+  const candidate = error as
+    | {
+        code?: unknown;
+        message?: unknown;
+        shortMessage?: unknown;
+        error?: { code?: unknown; message?: unknown };
+        info?: { error?: { code?: unknown; message?: unknown } };
+      }
+    | null;
+
+  // ethers wraps a JSON-RPC failure: `candidate.code` is ethers' own string code and the raw
+  // server code/message are attached nested (under `error` on the default path, `info.error`
+  // on others). A range rejection is recognized by that raw code, or by its message text.
+  const nested = [candidate?.error, candidate?.info?.error];
+  const codes = [candidate?.code, ...nested.map((entry) => entry?.code)];
+
+  for (const code of codes) {
+    if (
+      code === -32005 ||
+      code === -32602 ||
+      code === "-32005" ||
+      code === "-32602"
+    ) {
+      return true;
+    }
+  }
+
+  const text = [
+    typeof candidate?.message === "string" ? candidate.message : "",
+    typeof candidate?.shortMessage === "string" ? candidate.shortMessage : "",
+    typeof candidate?.code === "string" ? candidate.code : "",
+    ...nested.map((entry) =>
+      typeof entry?.message === "string" ? entry.message : ""
+    ),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return ["range", "limit", "too many", "exceed"].some((token) =>
+    text.includes(token)
+  );
+}
+
 export interface ClaimIndexerScanResult {
   fromBlock: number;
   toBlock: number;
@@ -50,7 +114,8 @@ export interface ClaimIndexerReplayResult {
  */
 async function storeClaimEvent(
   log: { topics: ReadonlyArray<string>; data: string; index: number; transactionHash: string; blockNumber: number },
-  contractAddress: string
+  contractAddress: string,
+  provider: JsonRpcProvider
 ): Promise<number> {
   let parsed;
   try {
@@ -61,7 +126,7 @@ async function storeClaimEvent(
   } catch {
     return 0;
   }
-  if (!parsed) {
+  if (!parsed || !CANONICAL_EVENT_NAMES.has(parsed.name)) {
     return 0;
   }
 
@@ -86,7 +151,7 @@ async function storeClaimEvent(
     select: { id: true },
   });
 
-  const blockTimestamp = await getBlockTimestamp(log.blockNumber);
+  const blockTimestamp = await getBlockTimestamp(log.blockNumber, provider);
 
   let eventType: ClaimEventType;
   let entitlementId: string | null = null;
@@ -149,8 +214,17 @@ async function storeClaimEvent(
 }
 
 /**
- * Scans the configured contract's canonical events into `ClaimEvent`, resuming from the
- * durable checkpoint and advancing it to the last scanned block.
+ * Scans the configured contract's canonical events into `ClaimEvent`.
+ *
+ * The scan is windowed and adaptive. It starts at the larger of the durable checkpoint and
+ * the configured deploy block (never block `0`, which a public RPC rejects), walks the range
+ * in consecutive windows of at most `INDEXER_MAX_BLOCK_RANGE`, and checkpoints the end of each
+ * window as soon as it is stored - so a crash mid-catch-up resumes from the last completed
+ * window instead of re-reading the whole range. A window the node rejects as too large is
+ * halved and retried; any other failure aborts the pass rather than silently shrinking it.
+ *
+ * A pass also stops starting new windows after a fixed time budget and leaves the rest to the
+ * next pass, so a multi-million-block catch-up cannot hold the process open indefinitely.
  */
 export async function scanClaimEvents(
   options: { provider?: JsonRpcProvider; fromBlock?: number; toBlock?: number } = {}
@@ -169,70 +243,92 @@ export async function scanClaimEvents(
 
   const fromBlock =
     options.fromBlock ??
-    (checkpoint ? Number(checkpoint.lastScannedBlock) + 1 : 0);
+    Math.max(
+      checkpoint ? Number(checkpoint.lastScannedBlock) + 1 : 0,
+      env.CLAIM_CORE_DEPLOY_BLOCK
+    );
   const toBlock = options.toBlock ?? (await provider.getBlockNumber());
 
   if (fromBlock > toBlock) {
     return { fromBlock, toBlock, stored: 0 };
   }
 
-  const contract = new Contract(
-    contractAddress,
-    nomineClaimCoreInterface,
-    provider
-  );
-
-  const [funded, settlements, reclaimed] = await Promise.all([
-    contract.queryFilter(contract.filters.CampaignFunded(), fromBlock, toBlock),
-    contract.queryFilter(contract.filters.Settlement(), fromBlock, toBlock),
-    contract.queryFilter(
-      contract.filters.CampaignReclaimed(),
-      fromBlock,
-      toBlock
-    ),
-  ]);
-
+  const startedAt = Date.now();
+  let windowSize = env.INDEXER_MAX_BLOCK_RANGE;
+  let cursor = fromBlock;
   let stored = 0;
-  for (const log of [...funded, ...settlements, ...reclaimed]) {
-    stored += await storeClaimEvent(
-      {
-        topics: [...log.topics],
-        data: log.data,
-        index: log.index,
-        transactionHash: log.transactionHash,
-        blockNumber: log.blockNumber,
-      },
-      contractAddress
-    );
-  }
+  let scannedTo = fromBlock - 1;
 
-  await prisma.chainCheckpoint.upsert({
-    where: {
-      chainId_contractAddress: {
+  while (cursor <= toBlock) {
+    if (Date.now() - startedAt >= PASS_TIME_BUDGET_MS) {
+      logger.info(
+        {
+          operation: "scanClaimEvents",
+          outcome: "time_budget_reached",
+          cursor,
+          toBlock,
+        },
+        "Claim Core scan stopped at the pass time budget; the next pass resumes from the checkpoint"
+      );
+      break;
+    }
+
+    const windowTo = Math.min(cursor + windowSize - 1, toBlock);
+
+    let logs;
+    try {
+      logs = await provider.getLogs({
+        address: contractAddress,
+        fromBlock: cursor,
+        toBlock: windowTo,
+      });
+    } catch (error) {
+      // The node refused this window as too large: shrink and retry the *same* window, so the
+      // range stays contiguous and nothing is skipped.
+      if (isRangeOrSizeError(error) && windowSize > MIN_WINDOW_SIZE) {
+        windowSize = Math.max(MIN_WINDOW_SIZE, Math.floor(windowSize / 2));
+        continue;
+      }
+      throw error;
+    }
+
+    for (const log of logs) {
+      stored += await storeClaimEvent(log, contractAddress, provider);
+    }
+
+    // Advance the durable checkpoint before moving on: the completed window is now the
+    // resume point, so a crash never re-reads it and never skips past it.
+    await prisma.chainCheckpoint.upsert({
+      where: {
+        chainId_contractAddress: {
+          chainId: env.CHAIN_ID,
+          contractAddress,
+        },
+      },
+      update: { lastScannedBlock: BigInt(windowTo) },
+      create: {
         chainId: env.CHAIN_ID,
         contractAddress,
+        lastScannedBlock: BigInt(windowTo),
       },
-    },
-    update: { lastScannedBlock: BigInt(toBlock) },
-    create: {
-      chainId: env.CHAIN_ID,
-      contractAddress,
-      lastScannedBlock: BigInt(toBlock),
-    },
-  });
+    });
+
+    scannedTo = windowTo;
+    cursor = windowTo + 1;
+  }
 
   logger.info(
     {
       operation: "scanClaimEvents",
       outcome: "scanned",
       fromBlock,
-      toBlock,
+      toBlock: scannedTo,
       stored,
     },
     "Claim Core events scanned"
   );
 
-  return { fromBlock, toBlock, stored };
+  return { fromBlock, toBlock: scannedTo, stored };
 }
 
 async function findCampaignForEvent(event: ClaimEvent) {
@@ -251,9 +347,14 @@ async function findCampaignForEvent(event: ClaimEvent) {
  *
  * The normal path requires an already-recorded `onchainId`, so a lost confirmation (the browser was
  * closed, the request failed, the indexer ran first) left the campaign funded on-chain but unbound
- * locally, and its entitlements could never settle. Matching is on the *immutable committed
- * configuration* the event carries, and is accepted only when exactly one draft matches, so a
- * coincidental partial match cannot attach funds to a different roster.
+ * locally, and its entitlements could never settle.
+ *
+ * The event carries the committed configuration *and* the entitlement commitment, so matching is a
+ * two-step: the scalar filter narrows to the drafts that share the immutable scalar config, then the
+ * recomputed entitlement root picks the single draft whose roster the event actually committed. Only
+ * a unique root match binds, so a coincidental scalar match cannot attach funds to a different roster.
+ * The scalar filter can legitimately describe more than one draft (two drafts may share the same
+ * approver, resolver, allocation and count), and only the root tells them apart.
  *
  * The funder is deliberately **not** part of the query: `confirmCampaignFunding` accepts funding from
  * any wallet linked to the issuer's account, while the draft stores the wallet that was linked at
@@ -303,23 +404,23 @@ async function bindUnboundDraft(event: ClaimEvent) {
       issuerPrivyId: true,
       entitlements: { select: { entitlementId: true } },
     },
-    take: 2,
+    take: 100,
   });
 
-  if (candidates.length !== 1) {
+  // The committed root is over 32-random-byte identifiers, so it names exactly one roster. Filter
+  // the scalar matches down to those that reproduce it, and bind only when that leaves one.
+  const rootMatches = candidates.filter(
+    (candidate) =>
+      computeEntitlementRoot(
+        candidate.entitlements.map((item) => item.entitlementId)
+      ).toLowerCase() === committedRoot
+  );
+
+  if (rootMatches.length !== 1) {
     return null;
   }
 
-  // The commitment binds the funded roster to the prepared roster: the scalar matches alone could
-  // still describe different entitlement identifiers.
-  const candidate = candidates[0];
-  const identifiers = candidate.entitlements.map((item) => item.entitlementId);
-  if (identifiers.length !== entitlementCount) {
-    return null;
-  }
-  if (computeEntitlementRoot(identifiers).toLowerCase() !== committedRoot) {
-    return null;
-  }
+  const candidate = rootMatches[0];
 
   const owner = await prisma.user.findUnique({
     where: { privyId: candidate.issuerPrivyId },
