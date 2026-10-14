@@ -39,6 +39,7 @@ export interface NetworkEnv {
   VITE_API_URL?: string;
   VITE_CLAIM_CORE_ADDRESS?: string;
   VITE_USDC_CONTRACT_ADDRESS?: string;
+  VITE_ENABLE_LEGACY_GIFTLINK?: string;
 }
 
 const NETWORKS: Record<ArcNetworkName, { name: string; chainId: number }> = {
@@ -129,6 +130,23 @@ export const network: NetworkConfig = parsed.network;
 
 /** Names of the missing or invalid variables. Empty means the configuration is usable. */
 export const configErrors: string[] = parsed.configErrors;
+
+export interface FeatureFlags {
+  /** When false (the default) the legacy GiftLink MVP surfaces are switched off. */
+  legacyGiftLink: boolean;
+}
+
+function readFlag(value: string | undefined): boolean {
+  return (value ?? "").trim().toLowerCase() === "true";
+}
+
+/**
+ * Product feature switches. Separate from the network variables above: a flag never affects
+ * whether the app can start, only which surfaces it registers.
+ */
+export const features: FeatureFlags = {
+  legacyGiftLink: readFlag(runtimeEnv.VITE_ENABLE_LEGACY_GIFTLINK),
+};
 
 /**
  * The one chain definition the app uses, for wagmi and Privy alike. Native currency is USDC with

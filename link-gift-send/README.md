@@ -59,6 +59,8 @@ Required:
 Optional:
 
 - `VITE_ARC_CHAIN_ID` - when set, must equal the selected network's chain ID.
+- `VITE_ENABLE_LEGACY_GIFTLINK` - `true` registers the legacy GiftLink MVP routes and links.
+  Default `false` keeps the app on the Nomine-only surface (Inbox, Studio, campaign links).
 - `VITE_GIFTLINK_CONTRACT_ADDRESS` - legacy GiftLink drop contract address.
 
 See `.env.example` for a commented example.

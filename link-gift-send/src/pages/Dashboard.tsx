@@ -44,7 +44,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      navigate("/app");
+      navigate("/app?next=/dashboard");
       return;
     }
 

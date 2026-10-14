@@ -32,7 +32,7 @@ export interface SignConsentInput {
   wallet: SigningWallet;
   /** Per-entitlement allocation in USDC base units. */
   amount: string;
-  /** Absolute unix seconds. Defaults to now + 1h, capped at the campaign expiry. */
+  /** Absolute unix seconds. Defaults to now + 24h, capped at the campaign expiry. */
   deadline?: number;
 }
 

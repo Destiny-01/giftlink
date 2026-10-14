@@ -163,6 +163,13 @@ function EntitlementCard({
               ? "Issuer approved. Awaiting Resolver attestation / submission."
               : "Pending submission. This request has not been confirmed on-chain yet."}
           </p>
+          {request?.status === "CONSENTED" ? (
+            <p className="text-sm text-muted-foreground">
+              Your request stays valid until{" "}
+              {formatTimestampWithTimezone(request.deadline)}. The issuer confirms
+              your wallet within that time.
+            </p>
+          ) : null}
           {request?.status === "ISSUER_APPROVED" || request?.status === "SUBMITTED" ? (
             <Button
               size="sm"
@@ -244,7 +251,7 @@ export default function Inbox() {
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
-      navigate("/app");
+      navigate("/app?next=/inbox");
     }
   }, [isAuthLoading, isAuthenticated, navigate]);
 
@@ -495,6 +502,14 @@ export default function Inbox() {
                 />
                 <NomineFactRow label="Payout wallet" value={signingWallet?.address ?? "—"} mono />
               </div>
+
+              <p className="text-sm text-muted-foreground">
+                Your request stays valid until{" "}
+                {consentPreview
+                  ? formatTimestampWithTimezone(consentPreview.deadline)
+                  : "—"}
+                . The issuer confirms your wallet within that time.
+              </p>
 
               <NomineDisclosure tone="warning" title="No revocation">
                 {WALLET_CHANGE_NOTICE}

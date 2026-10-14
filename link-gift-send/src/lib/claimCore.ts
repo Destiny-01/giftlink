@@ -480,6 +480,7 @@ export {
   formatUsdc,
   formatUsdcDisplay,
   formatTimestampWithTimezone,
+  defaultConsentDeadline,
 } from "./format";
 
 export function explorerTxUrl(txHash?: string | null): string | null {
@@ -496,16 +497,6 @@ export function shortenAddress(address?: string | null, size = 4): string {
   if (!address) return "—";
   if (address.length <= size * 2 + 2) return address;
   return `${address.slice(0, 2 + size)}…${address.slice(-size)}`;
-}
-
-/** Absolute unix-seconds deadline, never later than the campaign expiry. */
-export function defaultConsentDeadline(expiryTime?: number | null, windowSeconds = 3600): number {
-  const now = Math.floor(Date.now() / 1000);
-  const proposed = now + windowSeconds;
-  if (expiryTime && expiryTime > 0) {
-    return Math.min(proposed, expiryTime);
-  }
-  return proposed;
 }
 
 export const claimCore = {

@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import Landing from "./pages/Landing";
 import AuthGate from "./pages/AuthGate";
 import Dashboard from "./pages/Dashboard";
@@ -14,6 +14,13 @@ import StudioCampaign from "./pages/StudioCampaign";
 import Inbox from "./pages/Inbox";
 import CampaignLink from "./pages/CampaignLink";
 import NotFound from "./pages/NotFound";
+import { features } from "@/config/network";
+
+/**
+ * The legacy GiftLink MVP is switched off by default. When it is off its routes are not
+ * registered at all, so they fall through to NotFound; only the Nomine surfaces remain.
+ */
+const legacyGiftLink = features.legacyGiftLink;
 
 const App = () => (
   <TooltipProvider>
@@ -23,11 +30,14 @@ const App = () => (
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/app" element={<AuthGate />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/create" element={<Create />} />
-        <Route path="/claim/:id" element={<Claim />} />
-        <Route path="/activity" element={<Activity />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route
+          path="/dashboard"
+          element={legacyGiftLink ? <Dashboard /> : <Navigate to="/inbox" replace />}
+        />
+        {legacyGiftLink && <Route path="/create" element={<Create />} />}
+        {legacyGiftLink && <Route path="/claim/:id" element={<Claim />} />}
+        {legacyGiftLink && <Route path="/activity" element={<Activity />} />}
+        {legacyGiftLink && <Route path="/settings" element={<Settings />} />}
         <Route path="/studio" element={<Studio />} />
         <Route path="/studio/:campaignId" element={<StudioCampaign />} />
         <Route path="/inbox" element={<Inbox />} />

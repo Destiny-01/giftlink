@@ -5,8 +5,11 @@
 import { Link } from 'react-router-dom';
 import { ConnectWalletButton } from './ConnectWalletButton';
 import { TestnetPill } from './TestnetPill';
+import { useAuth } from '@/hooks/useAuth';
 
 export function Header() {
+  const { isAuthenticated } = useAuth();
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 border-b border-border bg-background/85 backdrop-blur">
       <div className="container mx-auto px-4">
@@ -34,12 +37,22 @@ export function Header() {
 
           <nav aria-label="Main" className="flex items-center gap-4">
             <TestnetPill />
-            <Link
-              to="/app"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              GiftLink
-            </Link>
+            {isAuthenticated && (
+              <>
+                <Link
+                  to="/inbox"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Inbox
+                </Link>
+                <Link
+                  to="/studio"
+                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Studio
+                </Link>
+              </>
+            )}
             <ConnectWalletButton />
           </nav>
         </div>

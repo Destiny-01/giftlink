@@ -1073,3 +1073,44 @@ export async function sponsorNomineSettle(
     throw normalizeError(error);
   }
 }
+
+/* ==========================================================================
+ * Studio access and public limits (WP2). The backend remains the authority on
+ * access; these only decide which Studio surface to render.
+ * ========================================================================== */
+
+export interface StudioAccess {
+  allowed: boolean;
+}
+
+/**
+ * Issuer: whether the authenticated account may use Studio. Only an explicit `allowed: false`
+ * denies; anything else leaves the caller showing the form, which is also what happens when the
+ * endpoint is unreachable.
+ */
+export async function getStudioAccess(): Promise<StudioAccess> {
+  try {
+    const response = await fetchWithAuth("/api/studio/access");
+    const data = (await response.json()) as { allowed?: boolean };
+    return { allowed: data.allowed !== false };
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}
+
+export interface NomineConfig {
+  limits?: Record<string, string | number | boolean>;
+}
+
+/** Public configuration. Only fields the server actually returns are passed through. */
+export async function getNomineConfig(): Promise<NomineConfig> {
+  try {
+    const response = await fetchWithAuth("/api/config");
+    const data = (await response.json()) as {
+      limits?: Record<string, string | number | boolean>;
+    };
+    return { limits: data.limits };
+  } catch (error) {
+    throw normalizeError(error);
+  }
+}

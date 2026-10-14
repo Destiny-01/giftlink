@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { useAuth } from "@/hooks/useAuth";
+import { network } from "@/config/network";
+import { shortenAddress } from "@/lib/claimCore";
 
 const lifecycle = [
   {
@@ -37,7 +39,7 @@ const lifecycle = [
 const ctaClass = "h-auto min-h-11 whitespace-normal px-6 py-3 sm:px-8";
 
 const claimRecord = [
-  { label: "Issuer", value: "Circle DevRel Collective" },
+  { label: "Issuer", value: "Example Issuer Collective" },
   { label: "Asset", value: "USDC" },
   { label: "Allocation", value: "250.00 USDC" },
   { label: "Eligibility verifier", value: "Declared allowlist" },
@@ -50,10 +52,10 @@ export default function Landing() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading } = useAuth();
 
-  // Redirect authenticated users to dashboard
+  // Signed-in visitors belong in the Inbox, not on the marketing page.
   useEffect(() => {
     if (!isLoading && isAuthenticated) {
-      navigate("/dashboard", { replace: true });
+      navigate("/inbox", { replace: true });
     }
   }, [isAuthenticated, isLoading, navigate]);
 
@@ -77,82 +79,56 @@ export default function Landing() {
               An issuer funds a Claim before it knows where the value will
               settle. Value can be addressed to a person, group, or condition
               the issuer can already identify, without collecting the final
-              wallet first. Nomine Inbox, where eligible people discover and
-              settle those Claims, is in development alongside the Claim Core.
+              wallet first. Nomine Inbox is where eligible people discover and
+              settle those Claims.
             </p>
 
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
               <Button asChild size="lg" className={ctaClass}>
-                <Link to="/app">
-                  Open GiftLink by Nomine
+                <Link to="/app?next=/inbox">
+                  Open Inbox
                   <ArrowRight className="h-5 w-5" />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className={ctaClass}>
-                <a href="#status">What is live today</a>
+                <Link to="/studio">Issuer Studio</Link>
               </Button>
             </div>
-
-            <p className="mt-8 text-sm text-muted-foreground">
-              Current proof scope:{" "}
-              <span className="font-mono">fixed-allocation USDC Claims on Arc</span>.
-            </p>
           </div>
         </section>
 
-        <section
-          id="status"
-          className="scroll-mt-20 border-b border-border px-4 py-16 sm:py-24"
-        >
+        {/* Network strip: only the facts the build is configured with. */}
+        <section className="border-b border-border px-4 py-8">
           <div className="container mx-auto max-w-5xl">
-            <h2 className="font-display text-3xl sm:text-4xl">
-              What is live, and what is not
-            </h2>
-            <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
-              The Claim Layer described on this page is being built. We do not
-              present it as finished, audited, or funded.
-            </p>
-
-            <div className="mt-12 grid gap-10 md:grid-cols-2">
-              <div className="border-t border-border pt-6">
-                <h3 className="font-display text-xl">Live today</h3>
-                <ul className="mt-4 space-y-4 text-base leading-7 text-muted-foreground">
-                  <li>
-                    <span className="text-foreground">
-                      GiftLink by Nomine
-                    </span>{" "}
-                    is the original gifting MVP and the only product surface
-                    that exists. A sender creates a claim link before knowing the
-                    recipient&apos;s wallet.
-                  </li>
-                  <li>
-                    The existing gifting routes in this application are
-                    unchanged, including claim links that already exist.
-                  </li>
-                </ul>
+            <dl className="flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+              <div className="flex items-baseline gap-2">
+                <dt className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Network
+                </dt>
+                <dd className="text-foreground">{network.name}</dd>
               </div>
-
-              <div className="border-t border-border pt-6">
-                <h3 className="font-display text-xl">In development</h3>
-                <ul className="mt-4 space-y-4 text-base leading-7 text-muted-foreground">
-                  <li>
-                    <span className="text-foreground">Nomine Claim Core</span>,
-                    the custody, authorization, and lifecycle contract that
-                    replaces the legacy escrow boundary.
-                  </li>
-                  <li>
-                    <span className="text-foreground">Nomine Inbox</span>, where
-                    a claimant discovers and settles funded Claims, and{" "}
-                    <span className="text-foreground">Nomine Studio</span>, where
-                    an issuer funds and reconciles a campaign.
-                  </li>
-                  <li>
-                    No campaign is funded on Arc yet. Nothing on this page is a
-                    live Claim, and the panels below are illustrations.
-                  </li>
-                </ul>
+              <div className="flex items-baseline gap-2">
+                <dt className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Claim Core
+                </dt>
+                <dd>
+                  <a
+                    href={`${network.explorerUrl}/address/${network.claimCoreAddress}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-accent hover:underline"
+                  >
+                    {shortenAddress(network.claimCoreAddress)}
+                  </a>
+                </dd>
               </div>
-            </div>
+              <div className="flex items-baseline gap-2">
+                <dt className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                  Asset
+                </dt>
+                <dd className="font-mono text-foreground">USDC</dd>
+              </div>
+            </dl>
           </div>
         </section>
 
@@ -211,41 +187,11 @@ export default function Landing() {
               </div>
 
               <figcaption className="border-t border-border px-6 py-4 text-sm text-muted-foreground">
-                An illustration of the intended Claim record, not a live
+                An illustration of the intended Claim record, not an actual
                 campaign. The issuer, amounts, and dates shown are examples, and
                 no settlement action is offered here.
               </figcaption>
             </figure>
-          </div>
-        </section>
-
-        <section id="giftlink" className="border-b border-border px-4 py-16 sm:py-24">
-          <div className="container mx-auto max-w-5xl">
-            <h2 className="font-display text-3xl sm:text-4xl">
-              GiftLink by Nomine
-            </h2>
-            <div className="mt-6 max-w-2xl space-y-4 text-base leading-7 text-muted-foreground">
-              <p>
-                GiftLink is the gifting MVP that started this work: send value
-                before you know the wallet. Building it made the wider problem
-                visible. Wallet addresses say where money goes right now, but
-                they do not express who value belongs to, which is why funded
-                value needs a Claim.
-              </p>
-              <p>
-                GiftLink remains a focused gifting application inside Nomine. It
-                uses the legacy contract and custody boundary, and it has not
-                migrated to the new Claim Core.
-              </p>
-            </div>
-            <div className="mt-8">
-              <Button asChild className={ctaClass}>
-                <Link to="/app">
-                  Open the GiftLink flow
-                  <ArrowRight className="h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
           </div>
         </section>
 
@@ -256,18 +202,18 @@ export default function Landing() {
                 Send value before you know the wallet.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-muted-foreground">
-                Start with GiftLink today, or follow the Claim lifecycle being
-                built for Nomine Inbox and Nomine Studio.
+                Check your Inbox for a funded Claim, or run a campaign from
+                Studio.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
                 <Button asChild size="lg" className={ctaClass}>
-                  <Link to="/app">
-                    Open GiftLink by Nomine
+                  <Link to="/app?next=/inbox">
+                    Open Inbox
                     <ArrowRight className="h-5 w-5" />
                   </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline" className={ctaClass}>
-                  <a href="#claim-lifecycle">Read the Claim lifecycle</a>
+                  <Link to="/studio">Issuer Studio</Link>
                 </Button>
               </div>
             </div>
