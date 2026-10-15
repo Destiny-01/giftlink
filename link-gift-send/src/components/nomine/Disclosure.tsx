@@ -5,9 +5,15 @@
  * wording aligned with `docs/nomine-claim-core-integration.md` §9.
  */
 
-import type { ReactNode } from "react";
-import { Info, ShieldAlert } from "lucide-react";
-import { explorerAddressUrl, shortenAddress } from "@/lib/claimCore";
+import { useState, type ReactNode } from "react";
+import { ChevronRight, ExternalLink, Info, ShieldAlert } from "lucide-react";
+import { explorerAddressUrl } from "@/lib/claimCore";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { MonoValue } from "./MonoValue";
 import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -93,10 +99,13 @@ export function NomineFactRow({
   mono?: boolean;
   className?: string;
 }) {
+  const isMonoString = mono && typeof value === "string";
   return (
     <div className={cn("flex items-start justify-between gap-4 text-sm", className)}>
       <span className="text-muted-foreground">{label}</span>
-      <span className={cn("text-right", mono && "font-mono")}>{value}</span>
+      <span className={cn("min-w-0 text-right", mono && !isMonoString && "font-mono")}>
+        {isMonoString ? <MonoValue value={value as string} label={label} /> : value}
+      </span>
     </div>
   );
 }
@@ -113,28 +122,66 @@ export function NomineAuthorityRow({
   const url = explorerAddressUrl(address);
   return (
     <div className="flex items-start justify-between gap-4 text-sm">
-      <div>
+      <div className="min-w-0">
         <div className="text-muted-foreground">{role}</div>
         {note ? <div className="text-xs text-muted-foreground/80">{note}</div> : null}
       </div>
-      <div className="text-right">
+      <div className="min-w-0 text-right">
         {address ? (
-          url ? (
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              className="font-mono text-accent hover:underline"
-            >
-              {shortenAddress(address, 6)}
-            </a>
-          ) : (
-            <span className="font-mono">{shortenAddress(address, 6)}</span>
-          )
+          <span className="inline-flex min-w-0 items-center justify-end gap-1">
+            <MonoValue value={address} label="Address" />
+            {url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noreferrer"
+                aria-label="View address on explorer"
+                className="shrink-0 text-accent hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            ) : null}
+          </span>
         ) : (
           <span className="text-muted-foreground">—</span>
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * A collapsed technical disclosure. Closed by default, so the plain-language surface stays plain
+ * while the exact facts (contract, digest, authorities) remain one tap away and never hidden.
+ */
+export function NomineDetails({
+  label = "Details",
+  children,
+  className,
+}: {
+  label?: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible open={open} onOpenChange={setOpen} className={cn("min-w-0", className)}>
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronRight
+            className={cn("h-4 w-4 transition-transform", open && "rotate-90")}
+          />
+          {label}
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2">
+        <div className="min-w-0 space-y-3 rounded-lg border border-border bg-surface/50 p-4 text-sm break-words">
+          {children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

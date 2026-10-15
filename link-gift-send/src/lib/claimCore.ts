@@ -479,6 +479,7 @@ export {
   usdcToBaseUnits,
   formatUsdc,
   formatUsdcDisplay,
+  formatUsdcFixed,
   formatTimestampWithTimezone,
   defaultConsentDeadline,
 } from "./format";

@@ -35,19 +35,30 @@ export function Header() {
             />
           </Link>
 
-          <nav aria-label="Main" className="flex items-center gap-4">
+          <nav aria-label="Main" className="flex items-center gap-3 sm:gap-4">
             <TestnetPill />
+            <Link
+              to="/roadmap"
+              className="whitespace-nowrap text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Roadmap
+            </Link>
             {isAuthenticated && (
               <>
+                {/*
+                  Inbox and Studio also live in the account menu, so on the narrowest screens
+                  they are hidden to keep the bar (which now carries the Roadmap link) from
+                  overflowing at 375px.
+                */}
                 <Link
                   to="/inbox"
-                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline"
                 >
                   Inbox
                 </Link>
                 <Link
                   to="/studio"
-                  className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                  className="hidden text-sm text-muted-foreground transition-colors hover:text-foreground sm:inline"
                 >
                   Studio
                 </Link>

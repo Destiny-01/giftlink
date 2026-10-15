@@ -552,6 +552,7 @@ interface RawCampaignAccounting {
 
 interface RawCampaignSummary {
   id: string;
+  name?: string | null;
   chainId: number;
   contractAddress: string;
   onchainId: string | null;
@@ -568,6 +569,8 @@ interface RawCampaignSummary {
   reclaimedTxHash: string | null;
   accounting: RawCampaignAccounting;
   createdAt: string;
+  /** Optional: the auto-approval backend lands separately from this UI. */
+  approvalMode?: "auto" | "manual" | null;
   roster?: { total: number };
 }
 
@@ -590,6 +593,8 @@ interface RawCampaignPublicView {
   usdcAddress: string;
   usdcDecimals: number;
   recovery: string;
+  /** Optional: the auto-approval backend lands separately from this UI. */
+  approvalMode?: "auto" | "manual" | null;
 }
 
 interface RawRequestReceipt {
@@ -603,6 +608,8 @@ interface RawRequestReceipt {
   hasIssuerApproval: boolean;
   submitTxHash: string | null;
   settlementTxHash: string | null;
+  /** Present only when an auto campaign approved the consent but the payout failed. */
+  settleError?: { code: string; message: string } | null;
 }
 
 interface RawCampaignRequest {
@@ -696,6 +703,7 @@ function campaignPublicViewFrom(raw: RawCampaignPublicView): CampaignPublicView 
     status: raw.status as CampaignStatus,
     funded: raw.fundingStatus !== "awaiting_funding",
     fundingTxHash: raw.fundingTxHash,
+    approvalMode: raw.approvalMode ?? null,
     recoveryRule: raw.recovery,
   };
 }
@@ -703,6 +711,7 @@ function campaignPublicViewFrom(raw: RawCampaignPublicView): CampaignPublicView 
 function nomineCampaignFrom(raw: RawCampaignSummary): NomineCampaign {
   return {
     id: raw.id,
+    name: raw.name ?? null,
     chainId: raw.chainId,
     contractAddress: raw.contractAddress,
     onchainId: toNumberOrNull(raw.onchainId),
@@ -711,10 +720,13 @@ function nomineCampaignFrom(raw: RawCampaignSummary): NomineCampaign {
     resolverAddress: raw.resolverAddress,
     allocation: raw.allocation,
     entitlementCount: raw.entitlementCount,
+    consumedCount:
+      typeof raw.consumedCount === "number" ? raw.consumedCount : null,
     fundingTxHash: raw.fundingTxHash,
     openingTime: unixSecondsFromIso(raw.openingTime),
     expiryTime: unixSecondsFromIso(raw.expiryTime),
     status: raw.status as CampaignStatus,
+    approvalMode: raw.approvalMode ?? null,
     reclaimedTxHash: raw.reclaimedTxHash,
     createdAt: raw.createdAt,
     accounting: {
@@ -751,6 +763,7 @@ function claimRequestViewFrom(raw: RawRequestReceipt): ClaimRequestView {
     status: raw.status as ClaimRequestStatus,
     submitTxHash: raw.submitTxHash,
     settlementTxHash: raw.settlementTxHash,
+    settleError: raw.settleError ?? null,
     receipt: settlementReceiptFrom(raw),
   };
 }
@@ -809,6 +822,19 @@ function nomineEntitlementFrom(entry: RawInboxEntry): NomineEntitlement {
         amount: entry.request.amount,
         deadline: unixSecondsFromEither(entry.request.deadline),
         status: entry.request.status as ClaimRequestStatus,
+        settlementTxHash: entry.settlementTxHash,
+        // The inbox carries only the verified settlement hash; a receipt exists only because the
+        // backend observed a `Settlement` event, exactly as `settlementReceiptFrom` requires.
+        receipt: entry.settlementTxHash
+          ? {
+              campaignId: campaign.id,
+              entitlementId: entry.entitlementId as Hex,
+              wallet: entry.request.walletAddress,
+              amount: entry.request.amount,
+              txHash: entry.settlementTxHash,
+              sponsored: true,
+            }
+          : null,
       }
     : null;
 
@@ -1102,6 +1128,14 @@ export type NomineLimitValue = string | number | boolean | null;
 
 export interface NomineConfig {
   limits?: Record<string, NomineLimitValue>;
+  /**
+   * The address Nomine approves payouts with when automatic approval is on.
+   *
+   * Three states, and they mean different things: a string (automatic approval is available),
+   * `null` (this deployment has no automatic approver, so the issuer must approve every payout), and
+   * `undefined` (the field is absent - an older backend - so the app must not assume either way).
+   */
+  autoApproverAddress?: string | null;
 }
 
 /** Public configuration. Only fields the server actually returns are passed through. */
@@ -1110,8 +1144,12 @@ export async function getNomineConfig(): Promise<NomineConfig> {
     const response = await fetchWithAuth("/api/config");
     const data = (await response.json()) as {
       limits?: Record<string, NomineLimitValue>;
+      autoApproverAddress?: string | null;
     };
-    return { limits: data.limits };
+    return {
+      limits: data.limits,
+      autoApproverAddress: data.autoApproverAddress,
+    };
   } catch (error) {
     throw normalizeError(error);
   }

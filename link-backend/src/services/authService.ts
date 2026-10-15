@@ -51,7 +51,7 @@ export async function authenticateWithPrivy(
   authToken: string
 ): Promise<AuthResponse> {
   const { userId } = await verifyPrivyAuthToken(authToken);
-  const { user } = await syncUserFromPrivy(userId);
+  const { user } = await syncUserByPrivyId(userId);
 
   logger.info(
     {
@@ -69,16 +69,43 @@ export async function authenticateWithPrivy(
 }
 
 /**
- * Resolves the Privy token to a persisted user and the verified identity attached to it.
- * The persisted user is the workflow record; the identities are what provider data
- * actually says, and they are what authorization decisions must be based on.
+ * Resolves a Privy token to a persisted user and the verified identity attached to it.
+ *
+ * The token is exchanged for the provider's own user object, so the persisted row and the
+ * identities are what provider data actually says - which is what authorization decisions
+ * must be based on.
  */
 export async function syncUserFromPrivy(idToken: string): Promise<{
   user: User;
   identities: PrivyIdentities;
 }> {
   const privyUser = await privyClient.getUser({ idToken });
+  return upsertPrivyUser(privyUser);
+}
 
+/**
+ * Resolves an already-verified Privy user id (DID) to a persisted user and its identities.
+ *
+ * This is the lookup `authenticateWithPrivy` uses: it has already verified the token and holds
+ * the user id, so it reads the full user by id rather than passing a DID where the SDK expects
+ * an id token. The `GetUser({ idToken })` path is reserved for callers that only hold a token.
+ */
+export async function syncUserByPrivyId(privyUserId: string): Promise<{
+  user: User;
+  identities: PrivyIdentities;
+}> {
+  const privyUser = await privyClient.getUserById(privyUserId);
+  return upsertPrivyUser(privyUser);
+}
+
+/**
+ * Persists the provider's user object and extracts its verified identities. Shared by both
+ * lookup paths so the row and identities written are identical whichever one is used.
+ */
+async function upsertPrivyUser(privyUser: PrivyUser): Promise<{
+  user: User;
+  identities: PrivyIdentities;
+}> {
   if (!privyUser) {
     throw new UnauthorizedError("Privy user not found");
   }

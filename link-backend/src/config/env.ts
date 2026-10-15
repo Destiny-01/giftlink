@@ -85,6 +85,14 @@ const envSchema = z
     BACKEND_SIGNER_ADDRESS: z.string().regex(ethAddressRegex),
     RELAYER_PRIVATE_KEY: z.string().regex(hexStringRegex),
     RELAYER_ADDRESS: z.string().regex(ethAddressRegex),
+    /**
+     * Nomine's auto-approver key, the default `issuerApprover` for campaigns that opt into
+     * automatic approval (D-021). Both variables are optional, but they come as a pair: a
+     * private key without its address (or the reverse) is a half-configured deployment, so
+     * the pair is required together and the derived address is checked in `config/wallets.ts`.
+     */
+    AUTO_APPROVER_PRIVATE_KEY: optionalString(z.string().regex(hexStringRegex)),
+    AUTO_APPROVER_ADDRESS: optionalString(z.string().regex(ethAddressRegex)),
     SERVER_PEPPER: z.string().regex(hexStringRegex),
     PRIVY_APP_ID: z.string().min(1),
     PRIVY_APP_SECRET: z.string().min(1),
@@ -149,6 +157,24 @@ const envSchema = z
         path: ["CHAIN_ID"],
         code: z.ZodIssueCode.custom,
         message: "CHAIN_ID does not match ARC_NETWORK",
+      });
+    }
+
+    // The auto-approver is optional, but a lone half of the pair is a misconfiguration: the
+    // address would be unverifiable against a key that is not there (or vice versa).
+    if (data.AUTO_APPROVER_PRIVATE_KEY && !data.AUTO_APPROVER_ADDRESS) {
+      ctx.addIssue({
+        path: ["AUTO_APPROVER_ADDRESS"],
+        code: z.ZodIssueCode.custom,
+        message: "AUTO_APPROVER_ADDRESS is required when AUTO_APPROVER_PRIVATE_KEY is set",
+      });
+    }
+    if (data.AUTO_APPROVER_ADDRESS && !data.AUTO_APPROVER_PRIVATE_KEY) {
+      ctx.addIssue({
+        path: ["AUTO_APPROVER_PRIVATE_KEY"],
+        code: z.ZodIssueCode.custom,
+        message:
+          "AUTO_APPROVER_PRIVATE_KEY is required when AUTO_APPROVER_ADDRESS is set",
       });
     }
 

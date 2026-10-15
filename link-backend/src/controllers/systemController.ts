@@ -29,6 +29,14 @@ export async function getConfigHandler(_req: AuthRequest, res: Response) {
     chainId: env.CHAIN_ID,
     claimCoreAddress: env.CLAIM_CORE_CONTRACT_ADDRESS.toLowerCase(),
     usdcAddress: env.USDC_CONTRACT_ADDRESS.toLowerCase(),
+    /**
+     * The Nomine auto-approver address, or null when automatic approval is not configured.
+     * Public by design (D-021): a client reads it to know whether a claim settles without a
+     * separate issuer signature.
+     */
+    autoApproverAddress: env.AUTO_APPROVER_ADDRESS
+      ? env.AUTO_APPROVER_ADDRESS.toLowerCase()
+      : null,
     studioInviteOnly: studioInviteOnly(),
     limits,
   });

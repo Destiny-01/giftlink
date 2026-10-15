@@ -28,6 +28,13 @@ export type WorkflowState =
 
 export type GateAuthority = "issuerApprover" | "resolver";
 
+/**
+ * How a campaign approves a consent. `auto` settles server-side on consent; `manual` waits for the
+ * issuer. Optional because the backend that serves it lands separately - the app must work before
+ * and after.
+ */
+export type ApprovalMode = "auto" | "manual";
+
 // ---------------------------------------------------------------------------
 // Primitives
 // ---------------------------------------------------------------------------
@@ -68,6 +75,8 @@ export interface RosterSummary {
 
 export interface NomineCampaign {
   id: string;
+  /** Optional human-readable label. Absent today; the UI falls back to a description. */
+  name?: string | null;
   chainId: number;
   contractAddress: string;
   onchainId?: number | null;
@@ -76,11 +85,15 @@ export interface NomineCampaign {
   resolverAddress: string;
   allocation: BaseUnits;
   entitlementCount: number;
+  /** Entitlements consumed by a verified settlement. */
+  consumedCount?: number | null;
   fundingTxHash?: string | null;
   paramsHash?: string | null;
   openingTime: number;
   expiryTime: number;
   status: CampaignStatus;
+  /** `auto` pays on claim; `manual` needs the issuer to sign each payout. */
+  approvalMode?: ApprovalMode | null;
   reclaimedTxHash?: string | null;
   createdAt?: string;
   accounting?: CampaignAccounting;
@@ -108,6 +121,8 @@ export interface CampaignPublicView {
   funded: boolean;
   /** On-chain verifiable funding evidence. */
   fundingTxHash?: string | null;
+  /** `auto` settles on consent; `manual` waits for the issuer. Absent on older backends. */
+  approvalMode?: ApprovalMode | null;
   /** Fixed, non-negotiable recovery rule copy provided by the backend. */
   recoveryRule: string;
 }
@@ -121,7 +136,11 @@ export interface PrepareCampaignRequest {
   emails: string[];
   openingTime: number;
   expiryTime: number;
-  issuerApproverAddress: string;
+  /**
+   * Omitted entirely to select automatic approval, which is the default. When present, every payout
+   * needs an `Approval` signature from this distinct external address.
+   */
+  issuerApproverAddress?: string;
 }
 
 export interface PrepareCampaignResponse {
@@ -209,6 +228,15 @@ export interface SubmitConsentResponse {
   request: ClaimRequestView;
 }
 
+/**
+ * Why an automatic payout did not complete. Present only when an `auto` campaign approved the
+ * consent but the settlement transaction failed, in which case the request stays `ISSUER_APPROVED`.
+ */
+export interface SettleError {
+  code: string;
+  message: string;
+}
+
 export interface ClaimRequestView {
   id: string;
   campaignId: string;
@@ -223,6 +251,7 @@ export interface ClaimRequestView {
   submitTxHash?: string | null;
   settlementTxHash?: string | null;
   failureReason?: string | null;
+  settleError?: SettleError | null;
   createdAt?: string;
   updatedAt?: string;
   receipt?: SettlementReceipt | null;

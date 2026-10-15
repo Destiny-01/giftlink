@@ -15,6 +15,7 @@ import {
   submitIssuerApproval,
 } from "../services/claimRequestService";
 import { settleClaim } from "../services/claimRelayService";
+import { logger } from "../config/logger";
 import type {
   ConfirmCampaignRequest,
   ConsentRequest,
@@ -24,6 +25,7 @@ import type {
 } from "../dto/campaign.dto";
 import { AuthRequest } from "../middleware/auth";
 import { ForbiddenError } from "../utils/errors";
+import { errorDiagnostics } from "../utils/safeLog";
 
 /**
  * HTTP surface for the Nomine Claim Core integration.
@@ -114,8 +116,39 @@ export async function inboxHandler(req: AuthRequest, res: Response) {
 export async function consentHandler(req: AuthRequest, res: Response) {
   const { id } = req.params;
   const body = req.body as ConsentRequest;
-  const result = await createConsent(id, body, requireAuthUser(req));
-  res.status(201).json(result);
+  const authUser = requireAuthUser(req);
+  const receipt = await createConsent(id, body, authUser);
+
+  if (receipt.approvalMode !== "auto") {
+    res.status(201).json(receipt);
+    return;
+  }
+
+  // Auto mode: the consent was approved automatically, so pay out immediately. The settled
+  // receipt (200) and, on failure, the ISSUER_APPROVED receipt (200) both describe the same
+  // request, so a client can branch on `settleError` rather than on the status code. A
+  // settlement failure must not lose the approval: the caller gets a machine-readable
+  // `settleError`, and the idempotent `/settle` endpoint is the retry.
+  try {
+    const settled = await settleClaim(id, receipt.requestId, authUser);
+    res.status(200).json({ ...settled, approvalMode: receipt.approvalMode });
+  } catch (error) {
+    const diagnostics = errorDiagnostics(error);
+    logger.error({
+      operation: "consentHandler",
+      outcome: "auto_settle_failed",
+      campaignId: id,
+      requestId: receipt.requestId,
+      ...diagnostics,
+    });
+    res.status(200).json({
+      ...receipt,
+      settleError: {
+        code: diagnostics.errorCode ?? diagnostics.errorType,
+        message: diagnostics.error,
+      },
+    });
+  }
 }
 
 export async function getRequestHandler(req: AuthRequest, res: Response) {
