@@ -135,4 +135,111 @@ describe("parseEnv", () => {
       `the error message leaked a value: ${message}`
     );
   });
+
+  test("no auto-approver is fine, and both halves together parse", () => {
+    const absent = parseEnv(baseRaw());
+    assert.equal(absent.AUTO_APPROVER_PRIVATE_KEY, undefined);
+    assert.equal(absent.AUTO_APPROVER_ADDRESS, undefined);
+
+    const key = "0x" + "44".repeat(32);
+    const address = "0x" + "44".repeat(20);
+    const configured = parseEnv(
+      baseRaw({ AUTO_APPROVER_PRIVATE_KEY: key, AUTO_APPROVER_ADDRESS: address })
+    );
+    assert.equal(configured.AUTO_APPROVER_PRIVATE_KEY, key);
+    assert.equal(configured.AUTO_APPROVER_ADDRESS, address);
+  });
+
+  test("an auto-approver private key without its address fails", () => {
+    expectFailure(baseRaw({ AUTO_APPROVER_PRIVATE_KEY: "0x" + "44".repeat(32) }), [
+      "AUTO_APPROVER_ADDRESS",
+    ]);
+  });
+
+  test("an auto-approver address without its private key fails", () => {
+    expectFailure(baseRaw({ AUTO_APPROVER_ADDRESS: "0x" + "44".repeat(20) }), [
+      "AUTO_APPROVER_PRIVATE_KEY",
+    ]);
+  });
+});
+
+/**
+ * The startup distinctness check the contract relies on: the auto-approver must be its own
+ * key, derived from the configured private key and distinct from the Resolver and relayer.
+ * Exercised through the pure helper so a wrong deployment fails here rather than as a revert.
+ */
+describe("deriveAutoApproverSigner", () => {
+  const { deriveAutoApproverSigner } =
+    require("../src/config/wallets") as typeof import("../src/config/wallets");
+  const { Wallet } = require("ethers") as typeof import("ethers");
+
+  const key = "0x" + "44".repeat(32);
+  const address = new Wallet(key).address;
+  const resolverKey = "0x" + "11".repeat(32);
+  const resolverAddress = new Wallet(resolverKey).address;
+  const relayerKey = "0x" + "22".repeat(32);
+  const relayerAddress = new Wallet(relayerKey).address;
+
+  test("derives the signer when the address matches and the roles are distinct", () => {
+    const signer = deriveAutoApproverSigner({
+      privateKey: key,
+      address,
+      resolverAddress,
+      relayerAddress,
+    });
+
+    assert.ok(signer);
+    assert.equal(signer.address.toLowerCase(), address.toLowerCase());
+  });
+
+  test("is null when no key is configured", () => {
+    assert.equal(
+      deriveAutoApproverSigner({
+        privateKey: undefined,
+        address: undefined,
+        resolverAddress,
+        relayerAddress,
+      }),
+      null
+    );
+  });
+
+  test("a mismatched address is refused", () => {
+    assert.throws(
+      () =>
+        deriveAutoApproverSigner({
+          privateKey: key,
+          address: resolverAddress,
+          resolverAddress,
+          relayerAddress,
+        }),
+      /does not match the derived address/
+    );
+  });
+
+  test("an auto-approver equal to the Resolver is refused", () => {
+    assert.throws(
+      () =>
+        deriveAutoApproverSigner({
+          privateKey: resolverKey,
+          address: resolverAddress,
+          resolverAddress,
+          relayerAddress,
+        }),
+      /must differ from BACKEND_SIGNER_ADDRESS/
+    );
+  });
+
+  test("an auto-approver equal to the relayer is refused", () => {
+    assert.throws(
+      () =>
+        deriveAutoApproverSigner({
+          privateKey: relayerKey,
+          address: relayerAddress,
+          resolverAddress,
+          relayerAddress,
+        }),
+      /must differ from RELAYER_ADDRESS/
+    );
+  });
 });

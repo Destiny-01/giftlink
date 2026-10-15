@@ -14,6 +14,13 @@ const txHashRegex = /^0x[A-Fa-f0-9]{64}$/;
 const bytes32Regex = /^0x[0-9a-fA-F]{64}$/;
 const uintStringRegex = /^\d+$/;
 
+/**
+ * How a campaign's approval is obtained. Derived, never stored: a campaign is `auto` when
+ * its `issuerApproverAddress` is the configured Nomine auto-approver, and `manual` otherwise
+ * (`docs/DECISIONS.md` D-021).
+ */
+export type CampaignApprovalMode = "auto" | "manual";
+
 export const prepareCampaignSchema = z
   .object({
     /** Allocation per entitlement in USDC base units, as a decimal string. */
@@ -26,9 +33,15 @@ export const prepareCampaignSchema = z
       .max(10_000, "Too many recipients for one campaign"),
     openingTime: z.number().int().nonnegative(),
     expiryTime: z.number().int().positive(),
+    /**
+     * Optional. When omitted, the configured Nomine auto-approver is used and the campaign
+     * approves automatically; when no auto-approver is configured, `prepareCampaign` refuses
+     * and asks the issuer for one (`docs/DECISIONS.md` D-021).
+     */
     issuerApproverAddress: z
       .string()
-      .regex(ethAddressRegex, "Invalid issuer approver address"),
+      .regex(ethAddressRegex, "Invalid issuer approver address")
+      .optional(),
   })
   .superRefine((data, ctx) => {
     if (!/^[1-9]\d*$/.test(data.allocation)) {
@@ -136,6 +149,8 @@ export interface CampaignSummaryResponse {
   issuerAddress: string;
   issuerApproverAddress: string;
   resolverAddress: string;
+  /** Derived: `auto` when the approver is the Nomine auto-approver, else `manual`. */
+  approvalMode: CampaignApprovalMode;
   fundingTxHash: string | null;
   reclaimedTxHash: string | null;
   accounting: CampaignAccountingResponse;
@@ -151,6 +166,8 @@ export interface CampaignPublicViewResponse {
   issuerAddress: string;
   issuerApproverAddress: string;
   resolverAddress: string;
+  /** Derived: `auto` when the approver is the Nomine auto-approver, else `manual`. */
+  approvalMode: CampaignApprovalMode;
   allocation: string;
   entitlementCount: number;
   budget: string;
@@ -178,12 +195,25 @@ export interface ClaimRequestReceiptResponse {
   settlementTxHash: string | null;
 }
 
+/**
+ * The response to a claimant's consent. Beyond the plain receipt it carries the derived
+ * `approvalMode`, and - when an `auto` campaign's immediate settlement fails - a
+ * `settleError` the UI can surface alongside a "Retry payout" action that calls the
+ * idempotent `/settle` endpoint.
+ */
+export interface ConsentReceiptResponse extends ClaimRequestReceiptResponse {
+  approvalMode: CampaignApprovalMode;
+  settleError?: { code: string; message: string };
+}
+
 export interface InboxEntryResponse {
   entitlementId: string;
   status: "Available" | "Completed" | "Expired";
   workflowStatus: string;
   opensAt: string | null;
   settlementTxHash: string | null;
+  /** Derived from the campaign's approver: `auto` or `manual`. */
+  approvalMode: CampaignApprovalMode;
   campaign: CampaignPublicViewResponse;
   request: {
     requestId: string;

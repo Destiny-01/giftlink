@@ -137,6 +137,7 @@ describe("GET /api/config", () => {
       chainId: TEST_CHAIN_ID,
       claimCoreAddress: TEST_CLAIM_CORE_ADDRESS.toLowerCase(),
       usdcAddress: TEST_USDC_ADDRESS.toLowerCase(),
+      autoApproverAddress: null,
       studioInviteOnly: false,
       limits: null,
     });
