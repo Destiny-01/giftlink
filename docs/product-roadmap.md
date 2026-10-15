@@ -2,7 +2,7 @@
 
 **Status:** Product direction and sequencing reference  
 **Created:** September 19, 2026  
-**Current release authority:** `docs/build-brief-v1.md`
+**Settled decisions:** `docs/DECISIONS.md`
 
 ![Visual product roadmap](./product-roadmap.svg)
 
@@ -453,5 +453,5 @@ This prevents the roadmap from becoming an automatic feature conveyor belt.
 - Upgradeability versus immutable deployment and migration.
 - The first external issuer and its exact eligibility source.
 
-These open decisions must be resolved inside the boundaries of `docs/build-brief-v1.md` and recorded in architecture decision records.
+These open decisions must be resolved within the current release scope and recorded in architecture decision records.
 

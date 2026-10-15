@@ -1,144 +1,52 @@
-# GiftLink Backend
+# Nomine backend (`link-backend`)
 
-Backend API for GiftLink, a commitment-based token drop system with social identity verification.
+The Express API behind Nomine. It prepares campaigns, verifies claimant consent, produces the approval and resolver signatures, relays `settle` on Arc, and indexes the `NomineClaimCore` events that are the source of truth for funding, settlement and reclaim.
 
-## Tech Stack
+**Stack:** Node.js, TypeScript, Express, Prisma + PostgreSQL, ethers v6, Privy (server auth), zod, pino.
 
-- Node.js + TypeScript
-- Express
-- Prisma + PostgreSQL
-- Ethers.js
-- Privy Auth
-- Zod validation
-- Pino logging
-
-## Features
-
-- **Drop Management** - Create, confirm, claim, and revoke token drops
-- **Identity Verification** - Verify social identities (email, Discord, Twitter, Telegram) via Privy
-- **Commitment System** - Secure recipient commitments using keccak256 hashing
-- **EIP-712 Signing** - Issue signed permits for claim authorization
-- **Gas Relaying** - Support for gasless claims via relayer
-- **Background Jobs** - Auto-expire drops and sync on-chain transactions
-
-## Project Structure
-
-```
-src/
- ├── index.ts              # Entry point
- ├── config/               # Configuration
- │    ├── env.ts
- │    ├── logger.ts
- │    ├── prisma.ts
- │    ├── privy.ts
- │    ├── wallets.ts
- │    ├── arcClient.ts
- │    └── abi.ts
- ├── controllers/          # Request handlers
- │    ├── dropController.ts
- │    └── userController.ts
- ├── services/             # Business logic
- │    ├── dropService.ts
- │    └── authService.ts
- ├── routes/               # API routes
- │    ├── drops.ts
- │    ├── users.ts
- │    ├── stats.ts
- │    └── index.ts
- ├── middleware/           # Express middleware
- │    ├── auth.ts
- │    ├── errorHandler.ts
- │    ├── logger.ts
- │    ├── rateLimiter.ts
- │    └── validator.ts
- ├── dto/                  # Zod schemas
- ├── jobs/                 # Background jobs
- │    ├── expireDropsJob.ts
- │    └── syncDropsJob.ts
- └── utils/                # Helpers
-      ├── drop.ts
-      ├── eip712.ts
-      └── errors.ts
-```
-
-## Setup
-
-### Prerequisites
-
-- Node.js 18+
-- PostgreSQL
-- Ethereum RPC endpoint
-- Privy app credentials
-
-### Installation
+## Run locally
 
 ```bash
 yarn install
+cp .env.example .env   # every variable is documented inline
 yarn prisma:generate
-yarn prisma:migrate
+npx prisma db push
+yarn dev
 ```
 
-### Environment Variables
+| Script | |
+|---|---|
+| `yarn dev` | Watch mode via tsx |
+| `yarn build` / `yarn start` | Compile to `dist/` and run |
+| `yarn typecheck` | `tsc --noEmit` |
+| `yarn test` | Node test runner over `test/**/*.test.ts` |
 
-Create a `.env` file:
+## Configuration
 
-```env
-PORT=4000
-DATABASE_URL=postgresql://user:password@localhost:5432/giftlink
-RPC_URL=https://mainnet.infura.io/v3/your_key
-GIFTLINK_CONTRACT_ADDRESS=0x...
-USDC_CONTRACT_ADDRESS=0x...
-CHAIN_ID=1
-BACKEND_SIGNER_PRIVATE_KEY=0x...
-BACKEND_SIGNER_ADDRESS=0x...
-RELAYER_PRIVATE_KEY=0x...
-RELAYER_ADDRESS=0x...
-SERVER_PEPPER=0x...
-PRIVY_APP_ID=your_privy_app_id
-PRIVY_APP_SECRET=your_privy_app_secret
-FRONTEND_URL=https://giftlink.app
-EIP712_DOMAIN_NAME=GiftLinkPermit
-EIP712_VERSION=1
-ENABLE_EVENT_LISTENER=true
-```
+`src/config/env.ts` validates the environment at startup and refuses to boot on an inconsistent network:
+- `ARC_NETWORK` must match `CHAIN_ID` (testnet `5042002`, mainnet `5042`).
+- On mainnet, `ISSUER_ALLOWLIST` and the campaign caps are required, and legacy routes must be off.
+- The resolver signer, relayer and optional auto-approver must be three distinct keys (D-021).
 
-### Run
+## Main routes (`/api`)
 
-```bash
-yarn dev    # Development
-yarn build  # Build
-yarn start  # Production
-```
+| Route | Purpose |
+|---|---|
+| `GET /config`, `GET /health` | Public network identity and liveness/indexer status |
+| `GET /studio/access` | Whether the signed-in user may create campaigns |
+| `POST /campaigns/prepare`, `POST /campaigns/:id/confirm` | Issuer prepares a campaign, then confirms it from the onchain funding event |
+| `GET /campaigns`, `GET /campaigns/:id`, `GET /campaigns/:id/requests` | Issuer views |
+| `GET /campaigns/:id/public` | Public campaign summary for claim links |
+| `GET /inbox` | The signed-in claimant's entitlements |
+| `POST /campaigns/:id/consent` | Claimant consent; in automatic mode this also approves and settles |
+| `POST /campaigns/:id/requests/:requestId/issuer-approval` | Manual-mode issuer approval |
+| `POST /campaigns/:id/requests/:requestId/settle` | Idempotent sponsored settlement |
+| `POST /campaigns/:id/recover/confirm` | Record an issuer reclaim from its onchain event |
 
-## API Endpoints
+The `drops` and `stats` routes serve the legacy GiftLink MVP and are only mounted when `ENABLE_LEGACY_GIFTLINK=true`.
 
-### Drops
+## Jobs
 
-- `POST /api/drops/prepare` - Create a pending drop
-- `POST /api/drops/confirm` - Confirm drop after on-chain transaction
-- `GET /api/drops/:id` - Get drop details
-- `POST /api/drops/:id/claim-permit` - Get signed claim permit
-- `POST /api/drops/:id/relay-claim` - Relay a claim transaction
-- `POST /api/drops/:id/claimed` - Record successful claim
-- `POST /api/drops/:id/update-receiver` - Update drop recipient
-- `POST /api/drops/:id/revoke` - Revoke a drop
+`claimIndexerJob` scans Claim Core events from `CLAIM_CORE_DEPLOY_BLOCK` in adaptive windows. It handles Arc RPC throttling with backoff and pacing.
 
-### Users
-
-- `POST /api/users/authenticate` - Authenticate with Privy token
-- `GET /api/users/:address/drops` - Get user's drops (sent/received)
-
-### Stats
-
-- `GET /api/stats/overview` - Platform statistics
-
-## Scripts
-
-```bash
-yarn dev              # Dev server with hot reload
-yarn build            # TypeScript compilation
-yarn start            # Run production build
-yarn prisma:generate  # Generate Prisma client
-yarn prisma:migrate   # Run migrations
-yarn prisma:studio    # Open Prisma Studio
-```
+See [`docs/nomine-claim-core-integration.md`](../docs/nomine-claim-core-integration.md) for the full contract between the backend, the frontend and the chain.

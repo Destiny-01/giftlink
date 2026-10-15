@@ -39,10 +39,10 @@ Motion: restrained 160–220ms feedback, reduced-motion alternative, no looping 
 
 Nomine / NOH-mi-neh / **Value, addressed.** Parent brand for the Claim Layer and economic inbox. Named surfaces: Nomine Inbox, Nomine Studio, Nomine Protocol. Focused gifting application: GiftLink by Nomine. Do not present future verticals or unimplemented surfaces as shipped.
 
-Use precise, calm human language: fund, address, qualify, claim, settle, route, recover, verify. A funded Claim is not proof that the viewer qualifies. “Completed” requires confirmed settlement. Name issuer, eligibility verifier, asset, amount, network, expiry/timezone and recovery rule. Never imply risk-free, instant, trustless off-chain facts or audited security without evidence. Full copy library: `brand/strategy-and-voice.md`; product documents override any example.
+Use precise, calm human language: fund, address, qualify, claim, settle, route, recover, verify. A funded Claim is not proof that the viewer qualifies. “Completed” requires confirmed settlement. Name issuer, eligibility verifier, asset, amount, network, expiry/timezone and recovery rule. Never imply risk-free, instant, trustless off-chain facts or audited security without evidence. Product documents override any example.
 
 Arc and USDC are contextual: “Built on Arc”, “Asset: USDC · Network: Arc”. Nomine leads. Do not imply an official partnership or redraw external brands. GiftLink inherits this system with a warmer personal message and a readable Nomine endorsement.
 
 ## Governance
 
-Canonical assets and tokens live here. New chats begin at `brand/IMPLEMENTATION.md`. Explorations are historical, never asset sources. Brand changes require an explicit user decision and a versioned update; routine faithful frontend implementation does not require re-approval of this identity. Keep the manifest check in the handoff. Do not modify canonical assets or their hashes merely to make validation pass.
+Canonical assets and tokens live here. Brand changes require an explicit user decision and a versioned update; routine faithful frontend implementation does not require re-approval of this identity. Do not modify canonical assets or their hashes merely to make validation pass.
