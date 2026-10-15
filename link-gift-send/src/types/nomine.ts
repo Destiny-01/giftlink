@@ -28,6 +28,13 @@ export type WorkflowState =
 
 export type GateAuthority = "issuerApprover" | "resolver";
 
+/**
+ * How a campaign approves a consent. `auto` settles server-side when the recipient claims; `manual`
+ * waits for the issuer to sign each payout. Optional because the backend that serves it lands
+ * separately - the app must work before and after.
+ */
+export type ApprovalMode = "auto" | "manual";
+
 // ---------------------------------------------------------------------------
 // Primitives
 // ---------------------------------------------------------------------------
@@ -68,6 +75,8 @@ export interface RosterSummary {
 
 export interface NomineCampaign {
   id: string;
+  /** Optional human-readable label. Absent today; the UI falls back to a description. */
+  name?: string | null;
   chainId: number;
   contractAddress: string;
   onchainId?: number | null;
@@ -76,11 +85,15 @@ export interface NomineCampaign {
   resolverAddress: string;
   allocation: BaseUnits;
   entitlementCount: number;
+  /** Entitlements consumed by a verified settlement. */
+  consumedCount?: number | null;
   fundingTxHash?: string | null;
   paramsHash?: string | null;
   openingTime: number;
   expiryTime: number;
   status: CampaignStatus;
+  /** `auto` pays on claim; `manual` needs the issuer to sign each payout. */
+  approvalMode?: ApprovalMode | null;
   reclaimedTxHash?: string | null;
   createdAt?: string;
   accounting?: CampaignAccounting;
@@ -121,7 +134,11 @@ export interface PrepareCampaignRequest {
   emails: string[];
   openingTime: number;
   expiryTime: number;
-  issuerApproverAddress: string;
+  /**
+   * Omitted entirely to select automatic approval, which is the default. When present, every payout
+   * needs an `Approval` signature from this distinct external address.
+   */
+  issuerApproverAddress?: string;
 }
 
 export interface PrepareCampaignResponse {

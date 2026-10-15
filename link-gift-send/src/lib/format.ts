@@ -31,6 +31,24 @@ export function formatUsdcDisplay(
 }
 
 /**
+ * A USDC amount with a fixed number of decimals, for labels paired with a rounded total
+ * ("2.00 / 5.00 USDC paid").
+ *
+ * A non-zero amount that would round away to zero is shown exactly instead of as "0.00", so a small
+ * settled amount is never reported as nothing.
+ */
+export function formatUsdcFixed(
+  baseUnits: bigint | number | string | null | undefined,
+  decimals = 2
+): string {
+  const exact = formatUsdc(baseUnits);
+  const numeric = Number(exact);
+  if (!Number.isFinite(numeric)) return exact;
+  if (numeric !== 0 && Number(numeric.toFixed(decimals)) === 0) return exact;
+  return numeric.toFixed(decimals);
+}
+
+/**
  * Format an absolute unix-seconds timestamp, explicitly showing the timezone, so a deadline can
  * never be read as local time by mistake.
  *

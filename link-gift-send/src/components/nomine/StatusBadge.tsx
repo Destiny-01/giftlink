@@ -9,6 +9,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { RecipientStatus } from "@/lib/campaignRecipients";
 import type {
   CampaignStatus,
   ClaimRequestStatus,
@@ -16,7 +17,7 @@ import type {
   WorkflowState,
 } from "@/types/nomine";
 
-type Kind = "lifecycle" | "request" | "workflow" | "campaign";
+type Kind = "lifecycle" | "request" | "workflow" | "campaign" | "recipient";
 
 interface Variant {
   label: string;
@@ -38,28 +39,36 @@ const LIFECYCLE: Record<LifecycleGroup, Variant> = {
 const REQUEST: Record<ClaimRequestStatus, Variant> = {
   CONSENTED: { label: "Awaiting issuer confirmation", className: ATTN },
   ISSUER_APPROVED: {
-    label: "Awaiting Resolver attestation / submission",
+    label: "Sending your USDC",
     className: PENDING,
   },
-  SUBMITTED: { label: "Pending submission", className: PENDING },
-  SETTLED: { label: "Completed", className: SUCCESS },
-  FAILED: { label: "Failed", className: DANGER },
+  SUBMITTED: { label: "Sending your USDC", className: PENDING },
+  SETTLED: { label: "Paid", className: SUCCESS },
+  FAILED: { label: "Something went wrong", className: DANGER },
   EXPIRED: { label: "Expired", className: NEUTRAL },
 };
 
 const WORKFLOW: Record<WorkflowState, Variant> = {
   AWAITING_ISSUER: { label: "Awaiting issuer confirmation", className: ATTN },
   AWAITING_RESOLVER: {
-    label: "Awaiting Resolver attestation / submission",
+    label: "Sending your USDC",
     className: PENDING,
   },
-  PENDING_SUBMISSION: { label: "Pending submission", className: PENDING },
+  PENDING_SUBMISSION: { label: "Sending your USDC", className: PENDING },
 };
 
 const CAMPAIGN: Record<CampaignStatus, Variant> = {
   DRAFT: { label: "Draft", className: PENDING },
   FUNDED: { label: "Funded", className: SUCCESS },
   RECLAIMED: { label: "Reclaimed", className: NEUTRAL },
+};
+
+/** The issuer's per-recipient view: the four states a payout row can be in. */
+const RECIPIENT: Record<RecipientStatus, Variant> = {
+  NOT_CLAIMED: { label: "Not claimed", className: NEUTRAL },
+  CLAIMING: { label: "Claiming", className: ATTN },
+  PAID: { label: "Paid", className: SUCCESS },
+  EXPIRED: { label: "Expired", className: NEUTRAL },
 };
 
 interface NomineStatusBadgeProps {
@@ -76,6 +85,8 @@ export function NomineStatusBadge({ value, kind, className }: NomineStatusBadgeP
       ? REQUEST
       : kind === "workflow"
       ? WORKFLOW
+      : kind === "recipient"
+      ? RECIPIENT
       : CAMPAIGN;
 
   const variant = (table as Record<string, Variant>)[value] ?? {

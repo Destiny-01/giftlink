@@ -14,6 +14,7 @@ import {
   formatTimestampWithTimezone,
   formatUsdc,
   formatUsdcDisplay,
+  formatUsdcFixed,
 } from "../src/lib/format.ts";
 
 /** The real values from the pilot walkthrough. */
@@ -47,4 +48,16 @@ test("USDC amounts render in base units without throwing", () => {
   assert.equal(formatUsdc("100000"), "0.1");
   assert.equal(formatUsdcDisplay("300000"), "0.3 USDC");
   assert.equal(formatUsdc(null), "0");
+});
+
+test("a fixed-decimals amount keeps the campaign progress label readable", () => {
+  // The campaign header renders "2.00 / 5.00 USDC paid".
+  assert.equal(formatUsdcFixed("2000000"), "2.00");
+  assert.equal(formatUsdcFixed("5000000"), "5.00");
+  assert.equal(formatUsdcFixed("0"), "0.00");
+  assert.equal(formatUsdcFixed(null), "0.00");
+  // A part-unit amount must never be rounded away to nothing.
+  assert.equal(formatUsdcFixed("1"), "0.000001");
+  // ...but an amount that genuinely rounds to a whole number still rounds.
+  assert.equal(formatUsdcFixed("999999"), "1.00");
 });
