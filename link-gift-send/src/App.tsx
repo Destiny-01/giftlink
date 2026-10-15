@@ -13,6 +13,7 @@ import Studio from "./pages/Studio";
 import StudioCampaign from "./pages/StudioCampaign";
 import Inbox from "./pages/Inbox";
 import CampaignLink from "./pages/CampaignLink";
+import Roadmap from "./pages/Roadmap";
 import NotFound from "./pages/NotFound";
 import { features } from "@/config/network";
 
@@ -42,6 +43,7 @@ const App = () => (
         <Route path="/studio/:campaignId" element={<StudioCampaign />} />
         <Route path="/inbox" element={<Inbox />} />
         <Route path="/campaign/:campaignId" element={<CampaignLink />} />
+        <Route path="/roadmap" element={<Roadmap />} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

@@ -21,6 +21,7 @@ import {
   Download,
   KeyRound,
   Mail,
+  Upload,
   Users,
 } from "lucide-react";
 import { MainLayout } from "@/components/MainLayout";
@@ -67,6 +68,8 @@ import {
 import { claimedCount } from "@/lib/campaignRecipients";
 import {
   CampaignProgress,
+  ComingSoonBadge,
+  FeaturePreview,
   D006_NOTICE,
   ELIGIBILITY_NOTICE,
   FUNDING_NOTICE,
@@ -679,6 +682,26 @@ export default function Studio() {
                 <p className="text-xs text-muted-foreground">
                   Newlines, commas and semicolons all work. Duplicates are ignored.
                 </p>
+                {/* Locked roadmap affordances: non-interactive on purpose (#28). */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    aria-disabled="true"
+                    className="inline-flex items-center gap-2 rounded-md border border-border bg-surface/50 px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    <Upload className="h-3 w-3" aria-hidden="true" />
+                    Import CSV
+                    <ComingSoonBadge />
+                  </span>
+                  <span className="inline-flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Gate: <span className="text-foreground">Email ✓</span>
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      GitHub · X · Discord
+                      <ComingSoonBadge />
+                    </span>
+                  </span>
+                </div>
               </section>
 
               {/* 2. How much each */}
@@ -869,6 +892,8 @@ export default function Studio() {
             </NomineDisclosure>
           </NomineDetails>
         </div>
+
+        <FeaturePreview surface="studio" className="mt-12" />
       </div>
     </MainLayout>
   );

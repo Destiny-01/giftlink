@@ -32,6 +32,7 @@ import {
 import {
   ClaimAction,
   MonoValue,
+  FeaturePreview,
   NomineChip,
   NomineDisclosure,
   NomineReceiptPanel,
@@ -244,6 +245,8 @@ export default function Inbox() {
             ) : null}
           </>
         )}
+
+        <FeaturePreview surface="inbox" className="mt-12" />
       </div>
     </MainLayout>
   );
