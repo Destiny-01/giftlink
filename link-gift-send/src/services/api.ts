@@ -590,6 +590,8 @@ interface RawCampaignPublicView {
   usdcAddress: string;
   usdcDecimals: number;
   recovery: string;
+  /** Optional: the auto-approval backend lands separately from this UI. */
+  approvalMode?: "auto" | "manual" | null;
 }
 
 interface RawRequestReceipt {
@@ -603,6 +605,8 @@ interface RawRequestReceipt {
   hasIssuerApproval: boolean;
   submitTxHash: string | null;
   settlementTxHash: string | null;
+  /** Present only when an auto campaign approved the consent but the payout failed. */
+  settleError?: { code: string; message: string } | null;
 }
 
 interface RawCampaignRequest {
@@ -696,6 +700,7 @@ function campaignPublicViewFrom(raw: RawCampaignPublicView): CampaignPublicView 
     status: raw.status as CampaignStatus,
     funded: raw.fundingStatus !== "awaiting_funding",
     fundingTxHash: raw.fundingTxHash,
+    approvalMode: raw.approvalMode ?? null,
     recoveryRule: raw.recovery,
   };
 }
@@ -751,6 +756,7 @@ function claimRequestViewFrom(raw: RawRequestReceipt): ClaimRequestView {
     status: raw.status as ClaimRequestStatus,
     submitTxHash: raw.submitTxHash,
     settlementTxHash: raw.settlementTxHash,
+    settleError: raw.settleError ?? null,
     receipt: settlementReceiptFrom(raw),
   };
 }
@@ -809,6 +815,19 @@ function nomineEntitlementFrom(entry: RawInboxEntry): NomineEntitlement {
         amount: entry.request.amount,
         deadline: unixSecondsFromEither(entry.request.deadline),
         status: entry.request.status as ClaimRequestStatus,
+        settlementTxHash: entry.settlementTxHash,
+        // The inbox carries only the verified settlement hash; a receipt exists only because the
+        // backend observed a `Settlement` event, exactly as `settlementReceiptFrom` requires.
+        receipt: entry.settlementTxHash
+          ? {
+              campaignId: campaign.id,
+              entitlementId: entry.entitlementId as Hex,
+              wallet: entry.request.walletAddress,
+              amount: entry.request.amount,
+              txHash: entry.settlementTxHash,
+              sponsored: true,
+            }
+          : null,
       }
     : null;
 
