@@ -6,8 +6,7 @@ import { Interface } from "ethers";
  * The previous file in this location was an explicitly-labelled placeholder from a
  * different contract generation: its `DropCreated`/`DropClaimed`/`DropRevoked` event
  * signatures had different parameter lists, so their topic hashes could never match a
- * real log, and only `claimWithPermit` happened to coincide
- * (`docs/foundation-audit.md` §2.6).
+ * real log, and only `claimWithPermit` happened to coincide.
  *
  * There is no compiled artefact and no deploy tooling in this repository, so the ABI
  * cannot be generated from one. It is therefore written out in full and kept honest by

@@ -21,3 +21,21 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Local working material (never published)
+.tmp/
+.worktrees/
+output/
+.commandcode/taste/
+*.diff
+.codex/
+CODEX.md
+docs/private/
+docs/*.zip
+docs/*.csv
+docs/NOMINE-*.md
+docs/BRAND*.md
+docs/crecimiento-*.md
+docs/founder-*.md
+docs/social-drafts-*.md
+docs/nomine-x-*.md

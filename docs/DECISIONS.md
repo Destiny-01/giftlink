@@ -70,7 +70,7 @@ The Claim Layer and economic inbox use **Nomine** as their parent brand, with th
 
 ## D-017 — Original Claim Register is the canonical Nomine identity
 
-The approved symbol is the original rectangular-block Claim Register from the first brand review (route 03). The later sliced diagonal N was explicitly rejected. The round-02 palette, typography and overall application aesthetic were approved. Implementation uses `brand/IMPLEMENTATION.md` and `brand/approved/`, including canonical SVGs unchanged, outlined wordmark lockups, local fonts and shared colour tokens. Explorations are historical and must not be used as production logo sources. Applying the brand does not expand product scope or change custody guarantees.
+The approved symbol is the original rectangular-block Claim Register from the first brand review (route 03). The later sliced diagonal N was explicitly rejected. The round-02 palette, typography and overall application aesthetic were approved. Implementation uses `brand/approved/`, including canonical SVGs unchanged, outlined wordmark lockups, local fonts and shared colour tokens. Applying the brand does not expand product scope or change custody guarantees.
 
 ## D-018 — Nomine evolves the existing codebase around a new Claim Core
 

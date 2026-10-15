@@ -4,8 +4,7 @@ import { AppError } from "./errors";
  * Allowlisted diagnostic fields for logs.
  *
  * D-008 keeps raw identifiers, credentials and private eligibility data out of public
- * logs, and the audit found whole-object dumps reaching the log sink
- * (`docs/foundation-audit.md` §2.11). Log records therefore carry a small, named set of
+ * logs, and whole-object dumps used to reach the log sink. Log records therefore carry a small, named set of
  * fields - operation, outcome, a safe correlation id such as a gift id, and a
  * transaction hash - rather than serialised requests, transaction objects, user records
  * or errors.

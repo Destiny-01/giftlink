@@ -138,8 +138,15 @@ function EmptyInbox({ email }: { email?: string }) {
 
 export default function Inbox() {
   const navigate = useNavigate();
-  const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
-  const { grouping, isLoading, error, refresh } = useNomineInbox({ pollMs: 30000 });
+  const { isAuthenticated, authReady, isLoading: isAuthLoading, user } = useAuth();
+  const {
+    grouping,
+    isLoading: isInboxLoading,
+    error,
+    refresh,
+  } = useNomineInbox({ pollMs: 30000, enabled: authReady });
+  // Until the identity token is ready the inbox has not been asked yet: that is loading, not empty.
+  const isLoading = isInboxLoading || !authReady;
   const { wallets, isLoading: isBalanceLoading } = useWalletBalances();
 
   useEffect(() => {

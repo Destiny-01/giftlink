@@ -144,8 +144,7 @@ async function calculateGasTankAmount(): Promise<{
  *
  * Social identifiers are compared case-insensitively because stored values come from the
  * provider verbatim while drop identifiers are normalized to lower case; an exact-match
- * lookup means a mixed-case handle fails to match itself
- * (`docs/foundation-audit.md` §2.9).
+ * lookup means a mixed-case handle fails to match itself.
  *
  * Returns null if the user is not found.
  */
@@ -311,8 +310,7 @@ export async function prepareDrop(
  * Binds a database gift to the gift the chain actually funded.
  *
  * Previously this wrote the caller's `onchainId` and `txHash` verbatim, so a forged
- * mapping could attach a valid creation event to the wrong gift
- * (`docs/foundation-audit.md` §1.3, §2.5). The binding now comes from the contract's own
+ * mapping could attach a valid creation event to the wrong gift. The binding now comes from the contract's own
  * `DropCreated` event, and the funded gift must agree with this gift's recipient
  * commitment, type, amount, gas tank and expiry - all of which are fixed on-chain by the
  * sender's own transaction and cannot be chosen by the caller.
@@ -1077,8 +1075,7 @@ async function persistSettlement({
  * Records a settlement that already happened on-chain.
  *
  * This endpoint previously accepted any successful transaction hash and wrote the
- * caller's own claimer address and wallet type into the settlement record
- * (`docs/foundation-audit.md` §2.5). It now requires the configured contract's canonical
+ * caller's own claimer address and wallet type into the settlement record. It now requires the configured contract's canonical
  * `DropClaimed` event for this gift, takes every recorded fact from that event, and
  * requires the caller to be the claimant the event names.
  *
@@ -1354,7 +1351,7 @@ export async function getClaimableDrops(privyId: string) {
 
   // Build list of identifiers to match. Social handles are normalized the same way drop
   // identifiers are (lower-cased at prepare time), so a mixed-case stored handle matches
-  // itself instead of disappearing from the recipient's inbox (`docs/foundation-audit.md` §2.9).
+  // itself instead of disappearing from the recipient's inbox.
   const identifiers: string[] = [];
   if (user.email) identifiers.push(user.email.trim().toLowerCase());
   if (user.discordId) identifiers.push(user.discordId.trim().toLowerCase());

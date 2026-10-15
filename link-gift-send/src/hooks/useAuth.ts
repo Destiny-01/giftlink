@@ -53,10 +53,10 @@ export function useAuth() {
   const lastAuthenticatedUserRef = useRef<string | undefined>(undefined);
   const navigate = useNavigate();
 
-  // Set identity token getter for API service
-  useEffect(() => {
-    api.setIdentityTokenGetter(() => identityToken || null);
-  }, [identityToken]);
+  // Set the identity token getter for the API service during render, not in an effect: child
+  // effects (e.g. the Inbox fetch) run before this hook's effects, and would otherwise send a
+  // stale localStorage token after a reload and get a 401.
+  api.setIdentityTokenGetter(() => identityToken || null);
 
   const wallets = useMemo(() => {
     if (!ready || !authenticated || !privyUser) {
@@ -284,6 +284,8 @@ export function useAuth() {
     privyUser, // Expose Privy user object so Settings can check linked accounts
     wallets, // Expose all wallets so Settings can show all linked wallets
     isAuthenticated: ready && authenticated,
+    /** Signed in and holding a fresh identity token, so authenticated API calls will succeed. */
+    authReady: ready && authenticated && !!identityToken,
     isLoading: !ready,
     connectWallet,
     signInWithEmail,

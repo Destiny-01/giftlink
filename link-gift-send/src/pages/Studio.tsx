@@ -600,6 +600,13 @@ export default function Studio() {
               })}
             </ol>
 
+            <p className="mt-3 rounded-md border border-border bg-surface/50 p-3 text-xs text-muted-foreground">
+              Heads up: some wallets (e.g. Rabby) show &ldquo;Simulation failed&rdquo; or
+              &ldquo;transfer amount exceeds balance&rdquo; on Arc. Their simulators don&apos;t model
+              Arc&apos;s native USDC, so they read your balance as zero. If your balance above covers
+              the total, it&apos;s safe to sign; Nomine confirms the result onchain.
+            </p>
+
             <WalletSelector
               wallets={walletBalances}
               selectedWallet={selectedWallet}
