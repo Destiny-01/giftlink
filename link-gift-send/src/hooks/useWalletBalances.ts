@@ -23,14 +23,14 @@ export interface WalletBalance {
 }
 
 export function useWalletBalances() {
-  const { wallets, isAuthenticated } = useAuth();
+  const { wallets, isAuthenticated, privyUser } = useAuth();
   const publicClient = usePublicClient();
   const [balances, setBalances] = useState<Record<string, bigint>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(false);
 
   // Get all wallets with their addresses
-  const walletList = useMemo(() => {
+  const loadedWalletList = useMemo(() => {
     if (!isAuthenticated || !wallets) return [];
     return wallets
       .map((w) => ({
@@ -47,6 +47,32 @@ export function useWalletBalances() {
           !!w.address && w.address.startsWith("0x")
       );
   }, [wallets, isAuthenticated]);
+
+  // The embedded wallet is on the Privy user from sign-up, but Privy only reports it through
+  // useWallets() once its iframe has loaded. Without this fallback a freshly signed-up claimant
+  // sees "Add a wallet" although they have one. Embedded signing goes through Privy's own
+  // signTypedData, which does not need the loaded wallet object.
+  const embeddedAddress = useMemo(() => {
+    if (!isAuthenticated || !privyUser) return null;
+    const linked = (privyUser.linkedAccounts ?? []) as Array<{
+      type?: string;
+      address?: string;
+      walletClientType?: string;
+    }>;
+    const address =
+      linked.find((a) => a.type === "wallet" && a.walletClientType === "privy")?.address ?? null;
+    return address && address.startsWith("0x") ? (address as `0x${string}`) : null;
+  }, [isAuthenticated, privyUser]);
+
+  const walletList = useMemo(() => {
+    if (!embeddedAddress) return loadedWalletList;
+    const known = loadedWalletList.some(
+      (w) => w.address.toLowerCase() === embeddedAddress.toLowerCase()
+    );
+    return known
+      ? loadedWalletList
+      : [{ address: embeddedAddress, walletType: "privy" as const }, ...loadedWalletList];
+  }, [loadedWalletList, embeddedAddress]);
 
   // Create a stable string key for wallet list to detect changes
   const walletListKey = useMemo(

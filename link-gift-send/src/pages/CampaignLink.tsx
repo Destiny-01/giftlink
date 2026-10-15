@@ -85,12 +85,12 @@ function SignInHero({
 export default function CampaignLink() {
   const { campaignId } = useParams<{ campaignId: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, authReady, user } = useAuth();
   const { wallets, isLoading: isBalanceLoading } = useWalletBalances();
   // Only the claimant needs their own entitlement, and only when signed in.
   const { grouping, isLoading: isInboxLoading, error: inboxError } = useNomineInbox({
     pollMs: 30000,
-    enabled: isAuthenticated,
+    enabled: authReady,
   });
 
   const [campaign, setCampaign] = useState<CampaignPublicView | null>(null);
@@ -170,7 +170,7 @@ export default function CampaignLink() {
                 emailHint={maskEmail(user?.email)}
                 onSignIn={() => navigate(nextPath)}
               />
-            ) : isInboxLoading ? (
+            ) : isInboxLoading || !authReady ? (
               <div className="mb-6 flex items-center gap-2 text-sm text-muted-foreground">
                 <Spinner className="h-4 w-4 text-accent" /> Loading your claim…
               </div>
