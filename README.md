@@ -1,6 +1,6 @@
 # Nomine: value, addressed
 
-**Nomine makes value addressable.** It is the Claim Layer and economic inbox: organizations reserve funded value for a person, group, condition or machine, and whoever qualifies settles it onchain, exactly once.
+**Nomine simply makes value addressable.** It is the Claim Layer and economic inbox where anyone can reserve funded value for any person, group, condition or machine, and that value settles onchain, to whoever qualifies.
 
 A **Claim** is capital escrowed up front, with five rules fixed before funding:
 - **Capital:** what is reserved.
@@ -9,7 +9,7 @@ A **Claim** is capital escrowed up front, with five rules fixed before funding:
 - **Settlement:** the approved outcome.
 - **Recovery:** where unused value returns.
 
-Issuers run Claim programs from Studio. Claimants find and settle everything addressed to them in the Inbox.
+Anyone can fund Claims from Studio. Claimants find and settle everything addressed to them in the Inbox.
 
 - **Live (Arc mainnet):** https://www.usenomine.com
 - **Testnet:** https://testnet.usenomine.com

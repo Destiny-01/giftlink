@@ -81,14 +81,15 @@ export default function Landing() {
               Value, addressed.
             </h1>
             <p className="mt-6 max-w-2xl text-xl sm:text-2xl">
-              The Claim Layer with an economic inbox.
+              Nomine simply makes value addressable.
             </p>
             <p className="mt-6 max-w-2xl text-base leading-7 text-muted-foreground">
-              A Claim is funded value addressed to a person, group, condition
-              or machine. The capital is escrowed first, with who qualifies,
-              when it opens, how it settles and where unused value returns all
-              fixed up front. Whoever qualifies settles it, exactly once. Nomine
-              Inbox is where people find and settle everything addressed to them.
+              It is the Claim Layer and economic inbox where anyone can reserve
+              funded value for any person, group, condition or machine, and that
+              value settles onchain, to whoever qualifies. The capital is escrowed
+              first, with who qualifies, when it opens, how it settles and where
+              unused value returns all fixed up front. Nomine Inbox is where
+              people find and settle everything addressed to them.
             </p>
 
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
