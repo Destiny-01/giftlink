@@ -1,6 +1,15 @@
 # Nomine: value, addressed
 
-Nomine lets you send USDC to people **before you know their wallet**. An issuer funds a campaign on Arc with USDC and a list of verified emails. Each recipient signs in with that email, presses **Claim**, and the USDC lands in their wallet. They need no gas, no existing wallet, and no forms.
+**Nomine makes value addressable.** It is the Claim Layer and economic inbox: organizations reserve funded value for a person, group, condition or machine, and whoever qualifies settles it onchain, exactly once.
+
+A **Claim** is capital escrowed up front, with five rules fixed before funding:
+- **Capital:** what is reserved.
+- **Gate:** who or what qualifies, proven onchain or attested by a named Resolver.
+- **Availability:** when it can be claimed.
+- **Settlement:** the approved outcome.
+- **Recovery:** where unused value returns.
+
+Issuers run Claim programs from Studio. Claimants find and settle everything addressed to them in the Inbox.
 
 - **Live (Arc mainnet):** https://www.usenomine.com
 - **Testnet:** https://testnet.usenomine.com
@@ -9,11 +18,21 @@ Nomine lets you send USDC to people **before you know their wallet**. An issuer 
 
 ## Why
 
-Paying people onchain usually starts with "send us your wallet address", which brings forms, spreadsheets, multisends and manual reconciliation. Nomine reverses the order. The money is escrowed first and addressed to an identity the issuer already has, and the destination wallet is chosen by the recipient at claim time.
+Blockchains move value well when both ends are known: send 100 USDC from wallet A to wallet B. Real economic obligations rarely start that way. Refunds, grant milestones, bounties, contributor rewards and payments to agents are owed to someone defined by a condition, long before a destination is known.
 
-## How it works
+Today one such obligation is split across unrelated systems:
+- eligibility in spreadsheets and forms;
+- money in a treasury;
+- approvals in tickets and custom claim pages;
+- reconciliation by hand.
 
-1. **Issuer funds a campaign.** In Studio, the issuer enters a list of emails, an amount per recipient and a claim window, then funds the campaign. USDC moves into the immutable `NomineClaimCore` escrow on Arc. Each recipient's entitlement is a Merkle leaf over a hashed email; no plaintext email ever goes onchain.
+Nothing binds the money to the rule for who gets it. A Claim does: one funded, inspectable object, from reservation to settlement or recovery.
+
+> DEXes make assets exchangeable. Nomine makes value addressable.
+
+## How it works today (V1 on Arc)
+
+1. **Issuer funds a Claim program.** In Studio, the issuer sets the Gate (V1: verified emails), the amount per claimant and the claim window, then funds the program. USDC moves into the immutable `NomineClaimCore` escrow on Arc. Each recipient's entitlement is a Merkle leaf over a hashed email; no plaintext email ever goes onchain.
 2. **Recipient claims.** The recipient signs in with that email through Privy, which also provides an embedded wallet, and presses **Claim**. They sign a free EIP-712 consent that names the payout wallet.
 3. **Settlement.** The contract requires the claimant's consent signature plus two distinct authority signatures over the same approval: the issuer approver and the Nomine resolver. A relayer submits `settle` and pays the gas, and USDC moves from escrow to the recipient's wallet. Each entitlement can be settled at most once.
 4. **Recovery.** After expiry, the issuer reclaims whatever was not claimed, directly from the contract.
@@ -51,8 +70,17 @@ cd link-gift-send && npm ci && cp .env.example .env && npm run dev
 
 This is a pilot on Arc mainnet. Studio is invite-only, and campaigns are capped at 20 USDC and 10 recipients while we onboard issuers one at a time.
 
-**Next:** CSV import, more Gates (GitHub, X, Discord), claim notifications, campaign analytics.
-**Later:** recurring payouts, multi-chain claims, public issuer profiles.
+**Next:**
+- more Gates (onchain holdings and roles, GitHub, X, Discord);
+- a Claims API and embeds;
+- CSV import, notifications and program analytics.
+
+**Later:**
+- milestone and recurring Claims;
+- agent and machine Claims;
+- richer settlement outcomes;
+- private eligibility proofs;
+- multi-chain.
 
 Full roadmap: [usenomine.com/roadmap](https://www.usenomine.com/roadmap).
 

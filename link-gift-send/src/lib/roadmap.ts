@@ -33,78 +33,117 @@ export interface RoadmapItem {
 export const roadmap: RoadmapItem[] = [
   // ---- Live: shipped and usable today ----
   {
-    id: "email-addressed-usdc",
-    title: "Email-addressed USDC",
-    blurb: "Send USDC to an email; recipients claim to a wallet with no gas.",
+    id: "funded-claims",
+    title: "Funded Claims on Arc",
+    blurb:
+      "Capital is escrowed in an immutable contract before a Claim is shown. It settles once or returns to the issuer.",
+    status: "live",
+  },
+  {
+    id: "economic-inbox",
+    title: "Economic inbox",
+    blurb: "Every funded Claim addressed to you, in one place, settled to the wallet you choose.",
+    status: "live",
+  },
+  {
+    id: "verified-email-gate",
+    title: "Verified-email Gate",
+    blurb: "The first Gate: eligibility from a verified email, attested by a named Resolver.",
     status: "live",
   },
   {
     id: "gasless-claims",
-    title: "Gasless claims",
-    blurb: "Nomine sponsors the settlement transaction.",
+    title: "Gasless settlement",
+    blurb: "Nomine sponsors the settlement transaction. Claimants never need a gas token.",
     status: "live",
   },
   {
     id: "automatic-approval",
-    title: "Automatic approval",
-    blurb: "Recipients are paid the moment they claim.",
+    title: "One-click settlement",
+    blurb: "With automatic approval, a qualifying claimant settles in a single click.",
     status: "live",
   },
   {
     id: "issuer-recovery",
     title: "Issuer recovery",
-    blurb: "Reclaim unclaimed funds after expiry.",
+    blurb: "Unused value returns to the issuer after expiry, under rules fixed at funding.",
     status: "live",
   },
 
   // ---- Next: actively planned, not built ----
   {
-    id: "csv-import",
-    title: "CSV import",
-    blurb: "Upload hundreds of recipients at once.",
+    // Belongs to Studio and the Inbox alike, so it carries no single surface.
+    id: "more-gates",
+    title: "More Gates",
+    blurb: "Onchain holdings and roles, GitHub, X and Discord as eligibility sources.",
+    status: "next",
+  },
+  {
+    id: "claims-api",
+    title: "Claims API and embeds",
+    blurb: "Create, fund and settle Claims from inside your own product.",
     status: "next",
     surface: "studio",
   },
   {
-    // Belongs to Studio and the Inbox alike, so it carries no single surface.
-    id: "more-gates",
-    title: "More Gates",
-    blurb: "Address value to a GitHub, X or Discord handle, not just an email.",
+    id: "csv-import",
+    title: "CSV import",
+    blurb: "Address a Claim program to thousands of recipients at once.",
     status: "next",
+    surface: "studio",
   },
   {
     id: "claim-notifications",
     title: "Claim notifications",
-    blurb: "Recipients get an email the moment value is addressed to them.",
+    blurb: "Know the moment value is addressed to you.",
     status: "next",
     surface: "inbox",
   },
   {
     id: "campaign-analytics",
-    title: "Campaign analytics",
-    blurb: "Claim rates, timing and unclaimed balance at a glance.",
+    title: "Program analytics",
+    blurb: "Claim rates, timing and unused balance at a glance.",
     status: "next",
     surface: "studio",
   },
 
   // ---- Later: considered, with no commitment ----
   {
-    id: "recurring-payouts",
-    title: "Recurring payouts",
-    blurb: "Payroll-style schedules for contributors and grantees.",
+    id: "milestone-claims",
+    title: "Milestone and recurring Claims",
+    blurb: "Grants that release across approved milestones, and recurring contributor allocations.",
     status: "later",
     surface: "studio",
   },
   {
+    id: "agent-claims",
+    title: "Agent and machine Claims",
+    blurb: "Value released to an agent or service once its work is verified.",
+    status: "later",
+  },
+  {
+    id: "settlement-outcomes",
+    title: "Richer settlement outcomes",
+    blurb: "Settle into more than a transfer, such as a sponsored onchain position.",
+    status: "later",
+  },
+  {
+    id: "private-eligibility",
+    title: "Private eligibility proofs",
+    blurb: "Prove you qualify without revealing who you are.",
+    status: "later",
+    surface: "inbox",
+  },
+  {
     id: "multi-chain",
     title: "Multi-chain",
-    blurb: "Fund on Arc, claim to the chain you use.",
+    blurb: "Fund on Arc, settle to the chain you use.",
     status: "later",
   },
   {
     id: "public-issuer-profiles",
     title: "Public issuer profiles",
-    blurb: "Verified issuer pages recipients can trust.",
+    blurb: "Verified issuer pages claimants can trust.",
     status: "later",
   },
 ];

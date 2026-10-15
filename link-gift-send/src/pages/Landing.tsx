@@ -38,9 +38,9 @@ const lifecycle = [
 
 // Plain-language, three steps. No jargon and no process detail.
 const howItWorks = [
-  "Issuer funds a campaign with USDC and a list of emails",
-  "Recipient signs in with that email",
-  "One click, and USDC lands in their wallet",
+  "Fund a Claim: capital is escrowed on Arc with its Gate, window and recovery rule fixed up front",
+  "Qualify: the claimant proves eligibility. Today that is a verified email, attested by a named Resolver",
+  "Settle: one click, onchain, exactly once. Unused value returns to the issuer",
 ];
 
 // Keeps call-to-action labels readable instead of clipped at 320px.
@@ -84,11 +84,11 @@ export default function Landing() {
               The Claim Layer with an economic inbox.
             </p>
             <p className="mt-6 max-w-2xl text-base leading-7 text-muted-foreground">
-              An issuer funds a Claim before it knows where the value will
-              settle. Value can be addressed to a person, group, or condition
-              the issuer can already identify, without collecting the final
-              wallet first. Nomine Inbox is where eligible people discover and
-              settle those Claims.
+              A Claim is funded value addressed to a person, group, condition
+              or machine. The capital is escrowed first, with who qualifies,
+              when it opens, how it settles and where unused value returns all
+              fixed up front. Whoever qualifies settles it, exactly once. Nomine
+              Inbox is where people find and settle everything addressed to them.
             </p>
 
             <div className="mt-10 flex flex-col gap-3 sm:flex-row">
@@ -250,10 +250,10 @@ export default function Landing() {
           <div className="container mx-auto max-w-5xl">
             <div className="border border-border px-6 py-12 text-center sm:px-12">
               <h2 className="font-display text-3xl sm:text-4xl">
-                Send value before you know the wallet.
+                Make value addressable.
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-base leading-7 text-muted-foreground">
-                Check your Inbox for a funded Claim, or run a campaign from
+                Check your Inbox for funded Claims, or fund a Claim program from
                 Studio.
               </p>
               <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">

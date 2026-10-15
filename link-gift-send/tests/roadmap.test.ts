@@ -33,10 +33,12 @@ test("every roadmap item has a status, an id and copy", () => {
   }
 });
 
-test("the four shipped capabilities are marked live", () => {
+test("the shipped capabilities are marked live", () => {
   const live = itemsByStatus("live").map((item) => item.id);
   assert.deepEqual(live, [
-    "email-addressed-usdc",
+    "funded-claims",
+    "economic-inbox",
+    "verified-email-gate",
     "gasless-claims",
     "automatic-approval",
     "issuer-recovery",
