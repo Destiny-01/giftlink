@@ -38,22 +38,22 @@ const LIFECYCLE: Record<LifecycleGroup, Variant> = {
 const REQUEST: Record<ClaimRequestStatus, Variant> = {
   CONSENTED: { label: "Awaiting issuer confirmation", className: ATTN },
   ISSUER_APPROVED: {
-    label: "Awaiting Resolver attestation / submission",
+    label: "Sending your USDC",
     className: PENDING,
   },
-  SUBMITTED: { label: "Pending submission", className: PENDING },
-  SETTLED: { label: "Completed", className: SUCCESS },
-  FAILED: { label: "Failed", className: DANGER },
+  SUBMITTED: { label: "Sending your USDC", className: PENDING },
+  SETTLED: { label: "Paid", className: SUCCESS },
+  FAILED: { label: "Something went wrong", className: DANGER },
   EXPIRED: { label: "Expired", className: NEUTRAL },
 };
 
 const WORKFLOW: Record<WorkflowState, Variant> = {
   AWAITING_ISSUER: { label: "Awaiting issuer confirmation", className: ATTN },
   AWAITING_RESOLVER: {
-    label: "Awaiting Resolver attestation / submission",
+    label: "Sending your USDC",
     className: PENDING,
   },
-  PENDING_SUBMISSION: { label: "Pending submission", className: PENDING },
+  PENDING_SUBMISSION: { label: "Sending your USDC", className: PENDING },
 };
 
 const CAMPAIGN: Record<CampaignStatus, Variant> = {

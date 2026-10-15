@@ -28,6 +28,13 @@ export type WorkflowState =
 
 export type GateAuthority = "issuerApprover" | "resolver";
 
+/**
+ * How a campaign approves a consent. `auto` settles server-side on consent; `manual` waits for the
+ * issuer. Optional because the backend that serves it lands separately - the app must work before
+ * and after.
+ */
+export type ApprovalMode = "auto" | "manual";
+
 // ---------------------------------------------------------------------------
 // Primitives
 // ---------------------------------------------------------------------------
@@ -108,6 +115,8 @@ export interface CampaignPublicView {
   funded: boolean;
   /** On-chain verifiable funding evidence. */
   fundingTxHash?: string | null;
+  /** `auto` settles on consent; `manual` waits for the issuer. Absent on older backends. */
+  approvalMode?: ApprovalMode | null;
   /** Fixed, non-negotiable recovery rule copy provided by the backend. */
   recoveryRule: string;
 }
@@ -209,6 +218,15 @@ export interface SubmitConsentResponse {
   request: ClaimRequestView;
 }
 
+/**
+ * Why an automatic payout did not complete. Present only when an `auto` campaign approved the
+ * consent but the settlement transaction failed, in which case the request stays `ISSUER_APPROVED`.
+ */
+export interface SettleError {
+  code: string;
+  message: string;
+}
+
 export interface ClaimRequestView {
   id: string;
   campaignId: string;
@@ -223,6 +241,7 @@ export interface ClaimRequestView {
   submitTxHash?: string | null;
   settlementTxHash?: string | null;
   failureReason?: string | null;
+  settleError?: SettleError | null;
   createdAt?: string;
   updatedAt?: string;
   receipt?: SettlementReceipt | null;

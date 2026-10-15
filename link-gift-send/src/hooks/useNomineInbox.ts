@@ -1,9 +1,9 @@
 /**
- * useNomineInbox - claimant-side inbox, request status polling and the sponsored settlement trigger.
+ * useNomineInbox - claimant-side inbox and request status polling.
  *
  * Only a verified `Settlement` event consumes an entitlement. A signed request or a transaction hash
  * is not settlement, so `Completed` is never inferred client-side from anything but the backend's
- * verified receipt.
+ * verified receipt. The one-click claim action itself lives in `useOneClickClaim`.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -76,13 +76,16 @@ export function groupEntitlements(
 // ---------------------------------------------------------------------------
 // Inbox
 // ---------------------------------------------------------------------------
-export function useNomineInbox(options?: { pollMs?: number }) {
+export function useNomineInbox(options?: { pollMs?: number; enabled?: boolean }) {
   const pollMs = options?.pollMs ?? 30000;
+  // Public surfaces (the campaign link before sign-in) must not call an authenticated endpoint.
+  const enabled = options?.enabled ?? true;
   const [entitlements, setEntitlements] = useState<NomineEntitlement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!enabled) return;
     setError(null);
     try {
       const data = await api.getNomineInbox();
@@ -92,20 +95,24 @@ export function useNomineInbox(options?: { pollMs?: number }) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
+    if (!enabled) {
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     refresh();
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   useEffect(() => {
-    if (!pollMs) return;
+    if (!pollMs || !enabled) return;
     const handle = setInterval(() => {
       refresh();
     }, pollMs);
     return () => clearInterval(handle);
-  }, [pollMs, refresh]);
+  }, [pollMs, enabled, refresh]);
 
   const grouping = useMemo(() => groupEntitlements(entitlements), [entitlements]);
 
@@ -158,71 +165,4 @@ export function useClaimRequestStatus(
   }, [campaignId, requestId, pollMs, refresh]);
 
   return { request, isLoading, error, refresh };
-}
-
-// ---------------------------------------------------------------------------
-// Sponsored settlement trigger
-// ---------------------------------------------------------------------------
-export type SettleStep = "idle" | "submitting" | "awaiting_confirmation" | "settled" | "failed";
-
-export function useSettleClaim() {
-  const [step, setStep] = useState<SettleStep>("idle");
-  const [error, setError] = useState<string | null>(null);
-  const [request, setRequest] = useState<ClaimRequestView | null>(null);
-
-  /**
-   * Trigger (or retry) the sponsored relay. The relayer attaches the Resolver attestation and
-   * broadcasts; we then poll until a verified Settlement or an honest failure.
-   */
-  const settle = useCallback(
-    async (campaignId: string, requestId: string): Promise<ClaimRequestView | null> => {
-      setError(null);
-      setStep("submitting");
-      try {
-        const submitted = await api.sponsorNomineSettle(campaignId, requestId);
-        setRequest(submitted?.request ?? null);
-
-        // Poll for a terminal state. Relay/RPC failure must never masquerade as completed.
-        setStep("awaiting_confirmation");
-        const deadline = Date.now() + 90000;
-        while (Date.now() < deadline) {
-          await new Promise((resolve) => setTimeout(resolve, 4000));
-          try {
-            const latest = await api.getNomineClaimRequest(campaignId, requestId);
-            const current = latest?.request ?? null;
-            setRequest(current);
-            if (current?.status === "SETTLED") {
-              setStep("settled");
-              return current;
-            }
-            if (current?.status === "FAILED" || current?.status === "EXPIRED") {
-              setStep("failed");
-              setError(current?.failureReason || "Settlement did not complete");
-              return current;
-            }
-          } catch {
-            // Transient read errors are not failures; keep polling.
-          }
-        }
-
-        // Still pending after the window: report honestly rather than claiming success.
-        setStep("awaiting_confirmation");
-        return request;
-      } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Failed to submit settlement";
-        setError(message);
-        setStep("failed");
-        throw err;
-      }
-    },
-    [request]
-  );
-
-  const reset = useCallback(() => {
-    setStep("idle");
-    setError(null);
-  }, []);
-
-  return { settle, step, error, request, reset };
 }

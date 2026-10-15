@@ -1,13 +1,15 @@
 /**
- * Settlement receipt panel.
+ * Settlement receipt panel - the success card.
  *
  * Only ever rendered for a verified `Settlement` event to the exact wallet and amount. A signed
  * request or a transaction hash is not settlement and must not use this component.
  */
 
-import { ExternalLink, ShieldCheck } from "lucide-react";
+import { CircleCheckBig, ExternalLink } from "lucide-react";
 import { Card } from "@/components/ui/card";
-import { formatUsdcDisplay, explorerTxUrl, shortenAddress } from "@/lib/claimCore";
+import { explorerTxUrl, formatUsdcDisplay } from "@/lib/claimCore";
+import { cn } from "@/lib/utils";
+import { MonoValue } from "./MonoValue";
 import type { SettlementReceipt } from "@/types/nomine";
 
 interface NomineReceiptPanelProps {
@@ -21,56 +23,53 @@ export function NomineReceiptPanel({ receipt, className }: NomineReceiptPanelPro
   const txUrl = explorerTxUrl(receipt.txHash);
 
   return (
-    <Card className={`border border-success/30 bg-success/5 p-4 ${className ?? ""}`}>
-      <div className="mb-3 flex items-center gap-2 text-sm font-medium text-success">
-        <ShieldCheck className="h-4 w-4" />
-        Settlement receipt
+    <Card className={cn("min-w-0 border border-success/30 bg-success/5 p-5", className)}>
+      <div className="mb-4 flex items-center gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+          <CircleCheckBig className="h-6 w-6" />
+        </span>
+        <p className="font-display text-lg font-semibold">
+          {formatUsdcDisplay(receipt.amount)} sent to your wallet
+        </p>
       </div>
 
       <dl className="grid gap-2 text-sm">
         <div className="flex items-center justify-between gap-4">
-          <dt className="text-muted-foreground">Amount (direct USDC payout)</dt>
-          <dd className="font-mono">{formatUsdcDisplay(receipt.amount)}</dd>
+          <dt className="text-muted-foreground">Wallet</dt>
+          <dd className="min-w-0 text-right">
+            <MonoValue value={receipt.wallet} label="Wallet" />
+          </dd>
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <dt className="text-muted-foreground">Paid to</dt>
-          <dd className="font-mono">{shortenAddress(receipt.wallet, 6)}</dd>
-        </div>
-        {receipt.blockNumber ? (
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground">Block</dt>
-            <dd className="font-mono">{receipt.blockNumber}</dd>
-          </div>
-        ) : null}
-        {receipt.settledAt ? (
-          <div className="flex items-center justify-between gap-4">
-            <dt className="text-muted-foreground">Settled</dt>
-            <dd>{new Date(receipt.settledAt).toLocaleString()}</dd>
-          </div>
-        ) : null}
         <div className="flex items-center justify-between gap-4">
           <dt className="text-muted-foreground">Transaction</dt>
-          <dd>
-            {txUrl ? (
-              <a
-                href={txUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-mono text-accent hover:underline"
-              >
-                {shortenAddress(receipt.txHash, 8)}
-                <ExternalLink className="h-3 w-3" />
-              </a>
-            ) : (
-              <span className="font-mono">{shortenAddress(receipt.txHash, 8)}</span>
-            )}
+          <dd className="min-w-0 text-right">
+            <MonoValue value={receipt.txHash} label="Transaction hash" />
           </dd>
         </div>
       </dl>
 
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+        {txUrl ? (
+          <a
+            href={txUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-accent hover:underline"
+          >
+            View on explorer
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        ) : null}
+        {receipt.settledAt ? (
+          <span className="text-xs text-muted-foreground">
+            {new Date(receipt.settledAt).toLocaleString()}
+          </span>
+        ) : null}
+      </div>
+
       <p className="mt-3 text-xs text-muted-foreground">
-        This entitlement is consumed because a verified Settlement event paid the exact amount to
-        the exact wallet. Sponsor gas is tracked separately and is never part of campaign funding.
+        A verified on-chain settlement paid this amount to the wallet you signed with. Nomine never
+        holds your funds.
       </p>
     </Card>
   );
