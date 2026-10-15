@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { RoadmapColumns } from "@/components/nomine";
 import { useAuth } from "@/hooks/useAuth";
 import { network } from "@/config/network";
 import { shortenAddress } from "@/lib/claimCore";
@@ -33,6 +34,13 @@ const lifecycle = [
     title: "Recover",
     body: "After expiry no new settlement is permitted. The issuer reclaims only the unused balance, under the rules fixed when the campaign was funded.",
   },
+];
+
+// Plain-language, three steps. No jargon and no process detail.
+const howItWorks = [
+  "Issuer funds a campaign with USDC and a list of emails",
+  "Recipient signs in with that email",
+  "One click, and USDC lands in their wallet",
 ];
 
 // Keeps call-to-action labels readable instead of clipped at 320px.
@@ -192,6 +200,49 @@ export default function Landing() {
                 no settlement action is offered here.
               </figcaption>
             </figure>
+          </div>
+        </section>
+
+        <section
+          id="how-it-works"
+          className="scroll-mt-20 border-b border-border px-4 py-16 sm:py-20"
+        >
+          <div className="container mx-auto max-w-5xl">
+            <h2 className="font-display text-3xl sm:text-4xl">How it works</h2>
+            <ol className="mt-10 grid gap-8 sm:grid-cols-3">
+              {howItWorks.map((step, index) => (
+                <li key={step} className="border-t border-border pt-6">
+                  <p className="font-mono text-sm text-accent-2">
+                    {String(index + 1).padStart(2, "0")}
+                  </p>
+                  <p className="mt-2 text-base leading-7">{step}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </section>
+
+        <section
+          id="roadmap"
+          className="scroll-mt-20 border-b border-border px-4 py-16 sm:py-24"
+        >
+          <div className="container mx-auto max-w-5xl">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <h2 className="font-display text-3xl sm:text-4xl">Roadmap</h2>
+                <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
+                  What is live today, and what is coming next. Live items are
+                  shipped; everything else is clearly marked.
+                </p>
+              </div>
+              <Link to="/roadmap" className="text-sm text-accent hover:underline">
+                See the full roadmap
+              </Link>
+            </div>
+
+            <div className="mt-12">
+              <RoadmapColumns />
+            </div>
           </div>
         </section>
 

@@ -45,6 +45,7 @@ import {
   DIRECT_PAYOUT_NOTICE,
   D006_NOTICE,
   ELIGIBILITY_NOTICE,
+  FeaturePreview,
   ISSUER_CONFIRMATION_NOTICE,
   NomineAuthorityRow,
   NomineChip,
@@ -468,6 +469,8 @@ export default function Inbox() {
             ) : null}
           </>
         )}
+
+        <FeaturePreview surface="inbox" className="mt-12" />
       </div>
 
       {/* Consent dialog - shows the exact ClaimRequest before signing. */}

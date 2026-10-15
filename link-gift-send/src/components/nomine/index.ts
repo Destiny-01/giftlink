@@ -1,5 +1,9 @@
 export { NomineStatusBadge, NomineChip } from "./StatusBadge";
 export { NomineReceiptPanel } from "./ReceiptPanel";
+export { ComingSoonBadge } from "./ComingSoonBadge";
+export { LockedFeatureCard } from "./LockedFeatureCard";
+export { FeaturePreview } from "./FeaturePreview";
+export { RoadmapColumns } from "./RoadmapColumns";
 export {
   NomineDisclosure,
   NomineFactRow,

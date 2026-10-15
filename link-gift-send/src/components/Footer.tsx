@@ -22,6 +22,12 @@ export function Footer() {
 
           <nav aria-label="Footer" className="flex flex-col gap-3 text-sm sm:items-end">
             <Link
+              to="/roadmap"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Roadmap
+            </Link>
+            <Link
               to="/app?next=/inbox"
               className="text-muted-foreground transition-colors hover:text-foreground"
             >

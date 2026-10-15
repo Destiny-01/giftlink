@@ -18,6 +18,7 @@ import {
   KeyRound,
   Mail,
   Plus,
+  Upload,
   Users,
 } from "lucide-react";
 import { MainLayout } from "@/components/MainLayout";
@@ -50,8 +51,10 @@ import {
   usdcToBaseUnits,
 } from "@/lib/claimCore";
 import {
+  ComingSoonBadge,
   D006_NOTICE,
   ELIGIBILITY_NOTICE,
+  FeaturePreview,
   FUNDING_NOTICE,
   ISSUER_KEY_NOTICE,
   NomineDisclosure,
@@ -488,6 +491,30 @@ export default function Studio() {
                   {emails.length} recipient{emails.length === 1 ? "" : "s"} entered. The server
                   normalizes and dedups emails and assigns identifiers.
                 </p>
+
+                {/*
+                  Locked inline affordances for the roadmap. Non-interactive on purpose: an
+                  aria-disabled chip, never a button that does nothing. See issue #28.
+                */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <span
+                    aria-disabled="true"
+                    className="inline-flex items-center gap-2 rounded-md border border-border bg-surface/50 px-2 py-0.5 text-xs text-muted-foreground"
+                  >
+                    <Upload className="h-3 w-3" aria-hidden="true" />
+                    Import CSV
+                    <ComingSoonBadge />
+                  </span>
+                  <span className="inline-flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>
+                      Gate: <span className="text-foreground">Email ✓</span>
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      GitHub · X · Discord
+                      <ComingSoonBadge />
+                    </span>
+                  </span>
+                </div>
               </div>
 
               {limitRows.length > 0 ? (
@@ -623,6 +650,8 @@ export default function Studio() {
             {D006_NOTICE}
           </NomineDisclosure>
         </div>
+
+        <FeaturePreview surface="studio" className="mt-12" />
       </div>
     </MainLayout>
   );
