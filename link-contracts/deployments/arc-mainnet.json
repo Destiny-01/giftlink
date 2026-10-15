@@ -1,0 +1,19 @@
+{
+  "contract": "NomineClaimCore",
+  "network": "mainnet",
+  "chainId": 5042,
+  "usdc": "0x3600000000000000000000000000000000000000",
+  "address": "0x42F3b6dAFAEC1F5df5c7D44224633250fb97b710",
+  "deploymentTx": "0xc583cc0dfc5e503e32e2c2eea63996be9e8dd31abb973e188709c0035afce8f5",
+  "deploymentBlock": 26020604,
+  "deployer": "0xaa89d0cc69077d271e67955e07ea5026b2f22a01",
+  "compiler": "0.8.24",
+  "viaIR": true,
+  "optimizerRuns": 200,
+  "evmVersion": "cancun",
+  "deployedWith": "Remix + MetaMask (flattened contracts/NomineClaimCore.sol; deployer key never left the wallet)",
+  "runtimeCheck": "Runtime bytecode equals the Hardhat build of contracts/NomineClaimCore.sol except immutables and the metadata hash; same code as the verified testnet deployment",
+  "recordedAt": "2026-10-15T02:20:05.000Z",
+  "explorer": "https://arc.etherscan.io/address/0x42F3b6dAFAEC1F5df5c7D44224633250fb97b710",
+  "sourceVerified": false
+}
