@@ -9,6 +9,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import type { RecipientStatus } from "@/lib/campaignRecipients";
 import type {
   CampaignStatus,
   ClaimRequestStatus,
@@ -16,7 +17,7 @@ import type {
   WorkflowState,
 } from "@/types/nomine";
 
-type Kind = "lifecycle" | "request" | "workflow" | "campaign";
+type Kind = "lifecycle" | "request" | "workflow" | "campaign" | "recipient";
 
 interface Variant {
   label: string;
@@ -62,6 +63,14 @@ const CAMPAIGN: Record<CampaignStatus, Variant> = {
   RECLAIMED: { label: "Reclaimed", className: NEUTRAL },
 };
 
+/** The issuer's per-recipient view: the four states a payout row can be in. */
+const RECIPIENT: Record<RecipientStatus, Variant> = {
+  NOT_CLAIMED: { label: "Not claimed", className: NEUTRAL },
+  CLAIMING: { label: "Claiming", className: ATTN },
+  PAID: { label: "Paid", className: SUCCESS },
+  EXPIRED: { label: "Expired", className: NEUTRAL },
+};
+
 interface NomineStatusBadgeProps {
   value: LifecycleGroup | ClaimRequestStatus | WorkflowState | CampaignStatus | string;
   kind: Kind;
@@ -76,6 +85,8 @@ export function NomineStatusBadge({ value, kind, className }: NomineStatusBadgeP
       ? REQUEST
       : kind === "workflow"
       ? WORKFLOW
+      : kind === "recipient"
+      ? RECIPIENT
       : CAMPAIGN;
 
   const variant = (table as Record<string, Variant>)[value] ?? {

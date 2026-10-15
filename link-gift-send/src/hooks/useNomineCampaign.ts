@@ -35,6 +35,7 @@ import {
   USDC_ADDRESS,
 } from "@/lib/claimCore";
 import type {
+  ClaimRequestView,
   IssuerApprovalRequest,
   IssuerApprovalRequestResponse,
   NomineCampaign,
@@ -189,6 +190,8 @@ export function useFundNomineCampaign() {
   const [step, setStep] = useState<FundStep>("idle");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** Broadcast hashes, so each finished funding step can link to its own transaction. */
+  const [txs, setTxs] = useState<{ approve?: string; fund?: string }>({});
 
   const fund = useCallback(
     async (
@@ -198,6 +201,7 @@ export function useFundNomineCampaign() {
       setIsLoading(true);
       setError(null);
       setStep("approving");
+      setTxs({});
 
       try {
         if (!publicClient) throw new Error("Public client not available");
@@ -229,6 +233,7 @@ export function useFundNomineCampaign() {
 
         if (previouslyBroadcast) {
           txHash = previouslyBroadcast;
+          setTxs((prev) => ({ ...prev, fund: previouslyBroadcast }));
           setStep("confirming");
         } else {
           // Step 1: approve USDC to the Claim Core for the full budget.
@@ -249,6 +254,7 @@ export function useFundNomineCampaign() {
                 functionName: "approve",
                 args: [cfg.address, budget],
               });
+              setTxs((prev) => ({ ...prev, approve: approveHash }));
               const approvalReceipt = await publicClient.waitForTransactionReceipt({
                 hash: approveHash,
               });
@@ -266,6 +272,7 @@ export function useFundNomineCampaign() {
                 to: USDC_ADDRESS,
                 data: approveData,
               });
+              setTxs((prev) => ({ ...prev, approve: approveTx.hash }));
               const approvalReceipt = await publicClient.waitForTransactionReceipt({
                 hash: approveTx.hash as `0x${string}`,
               });
@@ -292,6 +299,8 @@ export function useFundNomineCampaign() {
             const tx = await sendTransaction({ to: cfg.address, data });
             txHash = tx.hash as `0x${string}`;
           }
+
+          setTxs((prev) => ({ ...prev, fund: txHash }));
 
           // Persist the hash *before* waiting for the receipt: if this tab dies now, the next
           // attempt must reconcile this transaction instead of creating another campaign.
@@ -340,9 +349,10 @@ export function useFundNomineCampaign() {
   const reset = useCallback(() => {
     setStep("idle");
     setError(null);
+    setTxs({});
   }, []);
 
-  return { fund, step, isLoading, error, reset };
+  return { fund, step, isLoading, error, reset, txs };
 }
 
 // ---------------------------------------------------------------------------
@@ -353,6 +363,7 @@ export function useIssuerApproval() {
   const { address } = useAccount();
 
   const [isSigning, setIsSigning] = useState(false);
+  const [isSettling, setIsSettling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const buildTypedData = useCallback(
@@ -387,13 +398,13 @@ export function useIssuerApproval() {
       try {
         // The approval wallet must be the distinct external address configured at funding time.
         if (!address) {
-          throw new Error("Connect the external issuer-approval wallet to sign");
+          throw new Error("Connect the wallet this campaign approves payouts with");
         }
         if (
           address.toLowerCase() !== campaign.issuerApproverAddress.toLowerCase()
         ) {
           throw new Error(
-            "The connected wallet is not this campaign's issuer-approval address"
+            "The connected wallet doesn't match this campaign's payout approver"
           );
         }
         getClaimCoreConfig();
@@ -427,7 +438,53 @@ export function useIssuerApproval() {
     [address, buildTypedData, signTypedDataAsync]
   );
 
-  return { signApproval, buildTypedData, isSigning, error };
+  /**
+   * Relay the payout for a request that is already approved. Idempotent, so it is also the retry
+   * when an earlier attempt to send it failed - without this the payout would be stranded behind a
+   * page that offers no action for it.
+   */
+  const sendApprovedPayout = useCallback(
+    async (
+      campaignId: string,
+      requestId: string
+    ): Promise<{ settlement: ClaimRequestView | null; settleError: string | null }> => {
+      setIsSettling(true);
+      try {
+        const settled = await api.sponsorNomineSettle(campaignId, requestId);
+        return { settlement: settled?.request ?? null, settleError: null };
+      } catch (err: unknown) {
+        return {
+          settlement: null,
+          settleError:
+            err instanceof Error
+              ? err.message
+              : "The payout has not been sent yet. You can retry it.",
+        };
+      } finally {
+        setIsSettling(false);
+      }
+    },
+    []
+  );
+
+  /**
+   * Approve one payout and settle it, in one action.
+   *
+   * The issuer's signature is the step only they can take; the sponsored settlement is then relayed
+   * automatically so they never have to come back for a second action on the same payout.
+   */
+  const approveRequest = useCallback(
+    async (
+      campaign: NomineCampaign,
+      request: IssuerApprovalRequest
+    ): Promise<{ settlement: ClaimRequestView | null; settleError: string | null }> => {
+      await signApproval(campaign, request);
+      return sendApprovedPayout(campaign.id, request.id);
+    },
+    [signApproval, sendApprovedPayout]
+  );
+
+  return { approveRequest, sendApprovedPayout, isSigning, isSettling, error };
 }
 
 // ---------------------------------------------------------------------------

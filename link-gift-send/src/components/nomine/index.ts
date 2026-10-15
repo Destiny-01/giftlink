@@ -2,6 +2,7 @@ export { NomineStatusBadge, NomineChip } from "./StatusBadge";
 export { NomineReceiptPanel } from "./ReceiptPanel";
 export { MonoValue } from "./MonoValue";
 export { ClaimAction } from "./ClaimAction";
+export { CampaignProgress } from "./CampaignProgress";
 export {
   NomineDisclosure,
   NomineDetails,

@@ -1,10 +1,13 @@
 /**
  * Studio - issuer surface.
  *
- * Define a campaign: a fixed USDC allocation, a private verified-email list, opening/expiry and a
- * distinct external issuer-approval address. Review every immutable term, then fund from the
- * connected wallet through a step machine. "Funded" is only shown after the backend confirms the
- * canonical CampaignFunded event.
+ * Three steps on one page (who gets paid, how much each, when), then a short review and one funding
+ * action. Automatic approval is the default: the issuer funds once and the payouts land. Approving
+ * each payout by hand is an explicit, collapsed choice for issuers who need it.
+ *
+ * The exact terms (contract, config hash, resolver, approver) live in a collapsed Details
+ * disclosure, and the funding itself is a visible stepper so each broadcast transaction can be
+ * checked on the explorer.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -13,11 +16,11 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarClock,
-  CheckCircle2,
+  Check,
   Coins,
+  Download,
   KeyRound,
   Mail,
-  Plus,
   Users,
 } from "lucide-react";
 import { MainLayout } from "@/components/MainLayout";
@@ -25,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { FullPageLoader, Spinner } from "@/components/Loader";
 import { WalletSelector } from "@/components/WalletSelector";
@@ -44,16 +48,30 @@ import {
 } from "@/hooks/useNomineCampaign";
 import {
   CLAIM_CORE_CHAIN_ID,
+  explorerTxUrl,
   formatTimestampWithTimezone,
   formatUsdcDisplay,
+  formatUsdcFixed,
+  getClaimCoreConfig,
   isClaimCoreConfigured,
   usdcToBaseUnits,
 } from "@/lib/claimCore";
 import {
+  DEFAULT_EXPIRY_PRESET,
+  buildPreparePayload,
+  computeTotalBaseUnits,
+  parseRecipientEmails,
+  presetExpiry,
+  type ExpiryPreset,
+} from "@/lib/campaignForm";
+import { claimedCount } from "@/lib/campaignRecipients";
+import {
+  CampaignProgress,
   D006_NOTICE,
   ELIGIBILITY_NOTICE,
   FUNDING_NOTICE,
   ISSUER_KEY_NOTICE,
+  NomineDetails,
   NomineDisclosure,
   NomineFactRow,
   NomineStatusBadge,
@@ -61,24 +79,23 @@ import {
 } from "@/components/nomine";
 import type { PrepareCampaignResponse, SigningWallet } from "@/types/nomine";
 
-function parseEmails(text: string): string[] {
-  const seen = new Set<string>();
-  const list: string[] = [];
-  for (const raw of text.split(/[\n,;]+/)) {
-    const email = raw.trim();
-    if (!email) continue;
-    const key = email.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    list.push(email);
-  }
-  return list;
-}
-
 function toUnix(value: string): number | null {
   if (!value) return null;
   const ts = Math.floor(new Date(value).getTime() / 1000);
   return Number.isNaN(ts) ? null : ts;
+}
+
+/** A Date as the `datetime-local` input expects it, in the operator's own timezone. */
+function toLocalInput(seconds: number): string {
+  const date = new Date(seconds * 1000);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+}
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
 }
 
 /** "max_recipients" -> "Max recipients". The server owns the names; we only present them. */
@@ -97,15 +114,33 @@ function limitLabel(key: string): string {
   return LIMIT_LABELS[key] ?? humanizeLimitKey(key);
 }
 
+const PRESET_LABELS: Record<ExpiryPreset, string> = {
+  "24h": "24h",
+  "7d": "7 days",
+  "30d": "30 days",
+  custom: "Custom",
+};
+
+function StepHeading({ n, title }: { n: number; title: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent">
+        {n}
+      </span>
+      <h3 className="font-display text-base font-semibold">{title}</h3>
+    </div>
+  );
+}
+
 export default function Studio() {
   const navigate = useNavigate();
   const { isAuthenticated, isLoading: isAuthLoading } = useAuth();
-  const { address: activeAddress, chainId } = useAccount();
+  const { chainId } = useAccount();
   const { switchChain } = useSwitchChain();
 
   const { campaigns, isLoading: isCampaignsLoading, refresh } = useNomineCampaigns();
   const { prepare, isPreparing } = usePrepareNomineCampaign();
-  const { fund, step, isLoading: isFunding } = useFundNomineCampaign();
+  const { fund, step, isLoading: isFunding, txs } = useFundNomineCampaign();
 
   const {
     wallets: walletBalances,
@@ -113,23 +148,30 @@ export default function Studio() {
     refresh: refreshBalance,
   } = useWalletBalances();
 
-  const [allocation, setAllocation] = useState("");
   const [emailsText, setEmailsText] = useState("");
+  const [allocation, setAllocation] = useState("");
   const [opening, setOpening] = useState("");
   const [expiry, setExpiry] = useState("");
+  const [expiryPreset, setExpiryPreset] = useState<ExpiryPreset>(DEFAULT_EXPIRY_PRESET);
+  const [advanced, setAdvanced] = useState(false);
   const [approver, setApprover] = useState("");
   const [selectedWallet, setSelectedWallet] = useState<string | undefined>();
   const [prepared, setPrepared] = useState<PrepareCampaignResponse | null>(null);
-  const [access, setAccess] = useState<"checking" | "allowed" | "denied">(
-    "checking"
-  );
+  const [access, setAccess] = useState<"checking" | "allowed" | "denied">("checking");
   const [limits, setLimits] = useState<Record<
     string,
     string | number | boolean | null
   > | null>(null);
+  /** `null` means the deployment has no automatic approver, so advanced approval is forced on. */
+  const [autoApproverAvailable, setAutoApproverAvailable] = useState<boolean | null>(null);
   const [capMessage, setCapMessage] = useState<string | null>(null);
 
   const configured = isClaimCoreConfigured();
+  const config = useMemo(() => {
+    if (!configured) return null;
+    const cfg = getClaimCoreConfig();
+    return { address: cfg.address, chainId: cfg.chainId };
+  }, [configured]);
 
   useEffect(() => {
     if (!isAuthLoading && !isAuthenticated) {
@@ -137,8 +179,15 @@ export default function Studio() {
     }
   }, [isAuthLoading, isAuthenticated, navigate]);
 
-  // Studio access and pilot limits (WP2). An unreachable access endpoint shows the form: the
-  // backend still enforces access at prepare time.
+  // The window opens now by default, with the standard 7-day expiry.
+  useEffect(() => {
+    const start = nowSeconds();
+    setOpening((current) => current || toLocalInput(start));
+    setExpiry((current) => current || toLocalInput(presetExpiry(DEFAULT_EXPIRY_PRESET, start)));
+  }, []);
+
+  // Studio access, pilot limits and the automatic-approver availability (WP2). An unreachable
+  // access endpoint shows the form: the backend still enforces access at prepare time.
   useEffect(() => {
     if (isAuthLoading || !isAuthenticated) return;
     let cancelled = false;
@@ -156,7 +205,16 @@ export default function Studio() {
       try {
         const cfg = await api.getNomineConfig();
         const entries = Object.entries(cfg.limits ?? {});
-        if (!cancelled) setLimits(entries.length > 0 ? cfg.limits ?? null : null);
+        if (cancelled) return;
+        setLimits(entries.length > 0 ? cfg.limits ?? null : null);
+        // Automatic approval needs a configured approver address. Anything else means the issuer
+        // must supply one: an explicit null says this deployment has none, and an absent field
+        // belongs to a backend that predates automatic approval and still requires the address.
+        const autoAvailable =
+          typeof cfg.autoApproverAddress === "string" &&
+          cfg.autoApproverAddress.length > 0;
+        setAutoApproverAvailable(autoAvailable);
+        if (!autoAvailable) setAdvanced(true);
       } catch {
         if (!cancelled) setLimits(null);
       }
@@ -184,7 +242,7 @@ export default function Studio() {
     }
   }, [walletBalances, selectedWallet]);
 
-  const emails = useMemo(() => parseEmails(emailsText), [emailsText]);
+  const recipients = useMemo(() => parseRecipientEmails(emailsText), [emailsText]);
 
   const allocationBaseUnits = useMemo(() => {
     try {
@@ -196,51 +254,84 @@ export default function Studio() {
     }
   }, [allocation]);
 
-  const estimatedTotalBaseUnits = useMemo(() => {
-    if (!allocationBaseUnits || emails.length === 0) return null;
-    return allocationBaseUnits * BigInt(emails.length);
-  }, [allocationBaseUnits, emails.length]);
+  const totalBaseUnits = useMemo(
+    () => computeTotalBaseUnits(allocationBaseUnits, recipients.emails.length),
+    [allocationBaseUnits, recipients.emails.length]
+  );
 
   const selectedWalletData = walletBalances.find(
     (w: WalletBalance) => w.address === selectedWallet
   );
+
+  const applyPreset = (preset: ExpiryPreset) => {
+    setExpiryPreset(preset);
+    if (preset === "custom") return;
+    const openingTs = toUnix(opening) ?? nowSeconds();
+    setExpiry(toLocalInput(presetExpiry(preset, openingTs)));
+  };
+
+  const handleOpeningChange = (value: string) => {
+    setOpening(value);
+    // Keep a preset expiry relative to the opening time the operator just chose.
+    const openingTs = toUnix(value);
+    if (openingTs && expiryPreset !== "custom") {
+      setExpiry(toLocalInput(presetExpiry(expiryPreset, openingTs)));
+    }
+  };
 
   const handleReview = async () => {
     const openingTs = toUnix(opening);
     const expiryTs = toUnix(expiry);
 
     if (!allocationBaseUnits) {
-      toast({ title: "Invalid allocation", description: "Enter a USDC amount per recipient", variant: "destructive" });
+      toast({ title: "Invalid amount", description: "Enter a USDC amount per recipient", variant: "destructive" });
       return;
     }
-    if (emails.length === 0) {
+    if (recipients.emails.length === 0) {
       toast({ title: "Recipients required", description: "Add at least one verified email", variant: "destructive" });
+      return;
+    }
+    if (recipients.invalid.length > 0) {
+      toast({
+        title: "Some entries are not emails",
+        description: `Fix or remove: ${recipients.invalid.slice(0, 3).join(", ")}`,
+        variant: "destructive",
+      });
       return;
     }
     if (!openingTs || !expiryTs || expiryTs <= openingTs) {
       toast({ title: "Invalid window", description: "Expiry must be after opening", variant: "destructive" });
       return;
     }
-    if (!/^0x[a-fA-F0-9]{40}$/.test(approver.trim())) {
-      toast({ title: "Invalid approval address", description: "Enter a valid external issuer-approval address", variant: "destructive" });
+    if (advanced && !/^0x[a-fA-F0-9]{40}$/.test(approver.trim())) {
+      toast({
+        title: "Approval wallet required",
+        description:
+          autoApproverAvailable === false
+            ? "Enter the approval wallet address under Advanced."
+            : "Enter a valid external address, or turn advanced approval off.",
+        variant: "destructive",
+      });
       return;
     }
 
     setCapMessage(null);
 
     try {
-      const result = await prepare({
-        allocation: allocationBaseUnits.toString(),
-        emails,
-        openingTime: openingTs,
-        expiryTime: expiryTs,
-        issuerApproverAddress: approver.trim(),
-      });
+      const result = await prepare(
+        buildPreparePayload({
+          allocationBaseUnits,
+          emails: recipients.emails,
+          openingTime: openingTs,
+          expiryTime: expiryTs,
+          advanced,
+          issuerApproverAddress: approver,
+        })
+      );
       setPrepared(result);
       // Retain the recipient mapping locally: Nomine stores only the salted hash, so this is the
       // only record that can tie a later approval request to a person the issuer recognises.
       saveRoster(result.campaignId, result.mapping);
-      toast({ title: "Draft prepared", description: "Review the immutable terms before funding" });
     } catch (error: unknown) {
       // The backend is the authority on access; map its refusals to the same surfaces.
       const code = error instanceof ApiError ? error.code : undefined;
@@ -249,9 +340,7 @@ export default function Studio() {
         return;
       }
       if (code === "campaign_cap_exceeded") {
-        setCapMessage(
-          error instanceof Error ? error.message : "Campaign limit reached"
-        );
+        setCapMessage(error instanceof Error ? error.message : "Campaign limit reached");
         return;
       }
       toast({
@@ -293,17 +382,12 @@ export default function Studio() {
 
       const funded = await fund(prepared, signingWallet);
       if (funded?.status === "FUNDED") {
-        toast({ title: "Campaign funded", description: "The canonical CampaignFunded event is confirmed" });
-        setPrepared(null);
-        setAllocation("");
-        setEmailsText("");
-        setOpening("");
-        setExpiry("");
-        setApprover("");
+        toast({ title: "Campaign is live", description: "The campaign is funded and recipients can claim" });
         refresh();
         refreshBalance();
+        navigate(`/studio/${prepared.campaignId}`);
       } else {
-        toast({ title: "Funding recorded", description: "Awaiting backend confirmation", variant: "default" });
+        toast({ title: "Funding recorded", description: "Waiting for the backend to confirm", variant: "default" });
       }
     } catch (error: unknown) {
       toast({
@@ -316,13 +400,63 @@ export default function Studio() {
 
   if (isAuthLoading) return <FullPageLoader />;
 
-  const stepLabel: Record<string, string> = {
-    idle: "Fund campaign",
-    approving: "Approving USDC…",
-    creating: "Creating campaign on-chain…",
-    confirming: "Confirming funding event…",
-    funded: "Funded",
+  const fundingStepIndex: Record<string, number> = {
+    idle: 0,
+    approving: 0,
+    creating: 1,
+    confirming: 2,
+    funded: 3,
   };
+  const currentFundingStep = fundingStepIndex[step] ?? 0;
+  // "Live" is the last step, so reaching it means every earlier step finished too.
+  const fundingComplete = step === "funded";
+  const stepperSteps = [
+    { label: "Approve USDC", tx: txs.approve },
+    { label: "Fund campaign", tx: txs.fund },
+    { label: "Confirming", tx: txs.fund },
+    { label: "Live", tx: txs.fund },
+  ];
+
+  const advancedApprovalContent = (
+    <>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="font-medium text-foreground">Approve each payout myself</div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {autoApproverAvailable === false
+              ? "This deployment has no automatic approver, so every payout needs your signature."
+              : "Off means payouts are approved automatically when each recipient claims."}
+          </p>
+        </div>
+        <Switch
+          checked={advanced}
+          onCheckedChange={setAdvanced}
+          disabled={autoApproverAvailable === false}
+          aria-label="Approve each payout myself"
+        />
+      </div>
+
+      {advanced ? (
+        <div className="space-y-2 border-t border-border pt-3">
+          <Label htmlFor="approver" className="flex items-center gap-2">
+            <KeyRound className="h-4 w-4" /> Approval wallet address
+          </Label>
+          <Input
+            id="approver"
+            placeholder="0x…"
+            value={approver}
+            onChange={(e) => setApprover(e.target.value)}
+            className="font-mono"
+          />
+          <p className="text-xs text-muted-foreground">
+            Use a wallet that&apos;s different from the one you fund with. You&apos;ll sign each
+            payout before it&apos;s sent.
+          </p>
+          <p className="text-xs text-muted-foreground">{ISSUER_KEY_NOTICE}</p>
+        </div>
+      ) : null}
+    </>
+  );
 
   return (
     <MainLayout>
@@ -335,26 +469,24 @@ export default function Studio() {
         <div className="mb-6">
           <h1 className="font-display text-3xl font-bold">Studio</h1>
           <p className="mt-2 text-muted-foreground">
-            Fund a private, verified-email Claim Core campaign
+            Fund a private, verified-email campaign
           </p>
         </div>
 
         {!configured ? (
-          <NomineDisclosure tone="warning" title="Claim Core not configured" className="mb-6">
-            VITE_CLAIM_CORE_ADDRESS is not set. Nomine fails closed and will not send a transaction
-            until the Claim Core address and chain are configured.
+          <NomineDisclosure tone="warning" title="Claiming is not configured" className="mb-6">
+            This deployment is missing its claim contract configuration, so funding is disabled.
           </NomineDisclosure>
         ) : null}
 
         {access === "denied" ? (
-          // ------ Invite-only pilot ------
-          <Card className="mb-8 border border-border bg-card p-6">
+          <Card className="mb-8 min-w-0 border border-border bg-card p-6">
             <h2 className="font-display text-xl font-semibold">
               Studio is invite-only during the pilot
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              Nomine is onboarding issuers one at a time. To run a campaign, reach
-              out to @usenomine on X.
+              Nomine is onboarding issuers one at a time. To run a campaign, reach out to @usenomine
+              on X.
             </p>
           </Card>
         ) : access === "checking" ? (
@@ -363,51 +495,107 @@ export default function Studio() {
             Checking Studio access…
           </Card>
         ) : prepared ? (
-          // ------ Review immutable terms ------
-          <Card className="mb-8 border border-border bg-card p-6">
-            <div className="mb-4 flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-accent" />
-              <h2 className="font-display text-xl font-semibold">Review immutable terms</h2>
-            </div>
-            <p className="mb-4 text-sm text-muted-foreground">
-              These terms are fixed once funded. Entitlement identifiers are high-entropy and are
-              never derived from an email.
-            </p>
+          <Card className="mb-8 min-w-0 border border-border bg-card p-6">
+            <h2 className="mb-4 font-display text-xl font-semibold">Review and fund</h2>
 
             <div className="space-y-2">
-              <NomineFactRow label="Allocation per recipient" value={formatUsdcDisplay(prepared.config.allocation)} mono />
-              <NomineFactRow label="Exact recipient count" value={prepared.entitlementCount} />
-              <NomineFactRow label="Total funding requirement" value={formatUsdcDisplay(prepared.budget)} mono />
-              <NomineFactRow label="Opens" value={formatTimestampWithTimezone(prepared.config.openingTime)} />
-              <NomineFactRow label="Expires" value={formatTimestampWithTimezone(prepared.config.expiryTime)} />
-              <NomineFactRow label="Issuer-approval address" value={prepared.config.issuerApprover} mono />
-              <NomineFactRow label="Resolver address" value={prepared.config.resolver} mono />
-              <NomineFactRow label="Entitlement root" value={prepared.entitlementRoot} mono />
-              <div className="mt-3 rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                <div className="font-medium text-foreground">
-                  Recipient mapping — keep your own copy
-                </div>
-                <p className="mt-1">
-                  Nomine keeps only a salted hash of each address, so it cannot tell you who a later
-                  approval request belongs to. This record is what lets you verify a wallet
-                  assignment independently. Download it and store it outside Nomine.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => downloadRoster(prepared.campaignId, prepared.mapping)}
-                >
-                  Download recipient mapping (CSV)
-                </Button>
-              </div>
-              <NomineFactRow label="Chain" value={CLAIM_CORE_CHAIN_ID} />
+              <NomineFactRow label="Recipients" value={prepared.entitlementCount} />
+              <NomineFactRow
+                label="Amount each"
+                value={formatUsdcDisplay(prepared.config.allocation)}
+              />
+              <NomineFactRow
+                label="Total"
+                value={formatUsdcDisplay(prepared.budget)}
+                mono
+              />
+              <NomineFactRow
+                label="Opens"
+                value={formatTimestampWithTimezone(prepared.config.openingTime)}
+              />
+              <NomineFactRow
+                label="Expires"
+                value={formatTimestampWithTimezone(prepared.config.expiryTime)}
+              />
+              <NomineFactRow
+                label="Approval"
+                value={advanced ? "You approve each payout" : "Automatic"}
+              />
             </div>
 
-            <NomineDisclosure className="mt-4" title="Your approval key">
-              {ISSUER_KEY_NOTICE}
-            </NomineDisclosure>
+            <div className="mt-4">
+              <NomineDetails>
+                <NomineFactRow label="Contract" value={config?.address ?? ""} mono />
+                <NomineFactRow label="Approver" value={prepared.config.issuerApprover} mono />
+                <NomineFactRow label="Resolver" value={prepared.config.resolver} mono />
+                <NomineFactRow label="Config hash" value={prepared.paramsHash} mono />
+                <NomineFactRow label="Chain" value={config?.chainId ?? CLAIM_CORE_CHAIN_ID} />
+                <div className="space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
+                  <p>{ISSUER_KEY_NOTICE}</p>
+                  <div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => downloadRoster(prepared.campaignId, prepared.mapping)}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download recipient mapping (CSV)
+                    </Button>
+                    <p className="mt-2">
+                      Nomine keeps only a salted hash of each address, so this record is what lets you
+                      match a later payout request to a person. Keep your own copy.
+                    </p>
+                  </div>
+                </div>
+              </NomineDetails>
+            </div>
+
+            {/* Funding stepper: one row per broadcast step, each with its own explorer link. */}
+            <ol className="mt-6 space-y-2">
+              {stepperSteps.map((item, index) => {
+                const done = fundingComplete || index < currentFundingStep;
+                const active = !fundingComplete && index === currentFundingStep;
+                const txUrl = item.tx ? explorerTxUrl(item.tx) : null;
+                return (
+                  <li
+                    key={item.label}
+                    className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm"
+                  >
+                    <span
+                      className={
+                        done
+                          ? "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-success/20 text-success"
+                          : active
+                          ? "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent"
+                          : "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"
+                      }
+                    >
+                      {done ? (
+                        <Check className="h-3 w-3" />
+                      ) : active && isFunding ? (
+                        <Spinner className="h-3 w-3" />
+                      ) : (
+                        <span className="text-[10px]">{index + 1}</span>
+                      )}
+                    </span>
+                    <span className={done || active ? "text-foreground" : "text-muted-foreground"}>
+                      {item.label}
+                    </span>
+                    {done && txUrl ? (
+                      <a
+                        href={txUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-accent hover:underline"
+                      >
+                        View transaction
+                      </a>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ol>
 
             <WalletSelector
               wallets={walletBalances}
@@ -426,11 +614,15 @@ export default function Studio() {
                 {isFunding ? (
                   <>
                     <Spinner className="mr-2 h-4 w-4" />
-                    {stepLabel[step] ?? "Funding…"}
+                    {step === "approving"
+                      ? "Approving USDC…"
+                      : step === "creating"
+                      ? "Funding the campaign…"
+                      : "Confirming…"}
                   </>
                 ) : (
                   <>
-                    Fund campaign
+                    Fund {formatUsdcDisplay(prepared.budget)}
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
@@ -447,24 +639,57 @@ export default function Studio() {
             </div>
           </Card>
         ) : (
-          // ------ Define campaign ------
-          <Card className="mb-8 border border-border bg-card p-6">
-            <div className="mb-4 flex items-center gap-2">
-              <Plus className="h-5 w-5 text-accent" />
-              <h2 className="font-display text-xl font-semibold">New campaign</h2>
-            </div>
+          <Card className="mb-8 min-w-0 border border-border bg-card p-6">
+            <h2 className="mb-1 font-display text-xl font-semibold">New campaign</h2>
             <p className="mb-6 text-sm text-muted-foreground">
-              A fixed USDC allocation per recipient, a private verified-email list, an opening/expiry
-              window, and a distinct external issuer-approval address.
+              Three things: who gets paid, how much each, and when.
             </p>
 
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Coins className="h-4 w-4" /> Allocation per recipient (USDC)
+            <div className="space-y-8">
+              {/* 1. Who gets paid */}
+              <section className="space-y-2">
+                <StepHeading n={1} title="Who gets paid" />
+                <Label htmlFor="recipients" className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" /> Verified emails
+                </Label>
+                <Textarea
+                  id="recipients"
+                  rows={6}
+                  placeholder={"alice@example.com\nbob@example.com"}
+                  value={emailsText}
+                  onChange={(e) => setEmailsText(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {recipients.emails.length} recipient
+                  {recipients.emails.length === 1 ? "" : "s"}
+                  {recipients.duplicates.length > 0
+                    ? ` · ${recipients.duplicates.length} duplicate${
+                        recipients.duplicates.length === 1 ? "" : "s"
+                      } ignored`
+                    : ""}
+                </p>
+                {recipients.invalid.length > 0 ? (
+                  <p className="text-xs text-danger">
+                    Not valid emails: {recipients.invalid.slice(0, 5).join(", ")}
+                    {recipients.invalid.length > 5
+                      ? ` and ${recipients.invalid.length - 5} more`
+                      : ""}
+                  </p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">
+                  Newlines, commas and semicolons all work. Duplicates are ignored.
+                </p>
+              </section>
+
+              {/* 2. How much each */}
+              <section className="space-y-2">
+                <StepHeading n={2} title="How much each" />
+                <Label htmlFor="allocation" className="flex items-center gap-2">
+                  <Coins className="h-4 w-4" /> Amount per recipient (USDC)
                   <TestnetPill label="Test USDC · Arc Testnet" />
                 </Label>
                 <Input
+                  id="allocation"
                   type="number"
                   step="0.01"
                   min="0"
@@ -472,92 +697,101 @@ export default function Studio() {
                   value={allocation}
                   onChange={(e) => setAllocation(e.target.value)}
                 />
-              </div>
+                {totalBaseUnits ? (
+                  <p className="text-sm">
+                    Total:{" "}
+                    <span className="font-medium">
+                      {formatUsdcFixed(totalBaseUnits)} USDC
+                    </span>
+                  </p>
+                ) : null}
+                {limitRows.length > 0 ? (
+                  <div className="rounded-lg border border-border bg-surface/50 p-3 text-xs">
+                    <p className="font-medium text-foreground">Pilot limits</p>
+                    <dl className="mt-1 space-y-0.5">
+                      {limitRows.map(([key, value]) => (
+                        <div key={key} className="flex items-baseline justify-between gap-4">
+                          <dt className="text-muted-foreground">{limitLabel(key)}</dt>
+                          <dd className="font-mono text-foreground">{String(value)}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ) : null}
+              </section>
 
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <Mail className="h-4 w-4" /> Private verified-email list
-                </Label>
-                <Textarea
-                  rows={6}
-                  placeholder={"alice@example.com\nbob@example.com"}
-                  value={emailsText}
-                  onChange={(e) => setEmailsText(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {emails.length} recipient{emails.length === 1 ? "" : "s"} entered. The server
-                  normalizes and dedups emails and assigns identifiers.
-                </p>
-              </div>
-
-              {limitRows.length > 0 ? (
-                <div className="rounded-lg border border-border bg-surface/50 p-4 text-sm">
-                  <p className="font-medium">Pilot limits</p>
-                  <dl className="mt-2 space-y-1">
-                    {limitRows.map(([key, value]) => (
-                      <div
-                        key={key}
-                        className="flex items-baseline justify-between gap-4 text-muted-foreground"
-                      >
-                        <dt>{limitLabel(key)}</dt>
-                        <dd className="font-mono text-foreground">{String(value)}</dd>
-                      </div>
-                    ))}
-                  </dl>
+              {/* 3. When */}
+              <section className="space-y-3">
+                <StepHeading n={3} title="When" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="opens" className="flex items-center gap-2">
+                      <CalendarClock className="h-4 w-4" /> Opens
+                    </Label>
+                    <Input
+                      id="opens"
+                      type="datetime-local"
+                      value={opening}
+                      onChange={(e) => handleOpeningChange(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="expires" className="flex items-center gap-2">
+                      <CalendarClock className="h-4 w-4" /> Expires
+                    </Label>
+                    <Input
+                      id="expires"
+                      type="datetime-local"
+                      value={expiry}
+                      onChange={(e) => {
+                        // A hand-edited expiry is the operator's own value from here on, so a later
+                        // change to the opening time must not snap it back to the preset.
+                        setExpiry(e.target.value);
+                        setExpiryPreset("custom");
+                      }}
+                    />
+                  </div>
                 </div>
-              ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {(Object.keys(PRESET_LABELS) as ExpiryPreset[]).map((preset) => (
+                    <Button
+                      key={preset}
+                      type="button"
+                      size="sm"
+                      variant={expiryPreset === preset ? "default" : "outline"}
+                      className={
+                        expiryPreset === preset
+                          ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                          : undefined
+                      }
+                      onClick={() => applyPreset(preset)}
+                    >
+                      {PRESET_LABELS[preset]}
+                    </Button>
+                  ))}
+                </div>
+              </section>
+
+              {/* Approval. When this deployment has no automatic approver the section is not
+                  collapsed: the address the backend requires must not be hidden. */}
+              <section className="space-y-3 border-t border-border pt-6">
+                {autoApproverAvailable === false ? (
+                  <>
+                    <h3 className="font-display text-base font-semibold">
+                      Advanced: approve each payout yourself
+                    </h3>
+                    {advancedApprovalContent}
+                  </>
+                ) : (
+                  <NomineDetails label="Advanced: approve each payout yourself">
+                    {advancedApprovalContent}
+                  </NomineDetails>
+                )}
+              </section>
 
               <NomineDisclosure title="Eligibility">{ELIGIBILITY_NOTICE}</NomineDisclosure>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <CalendarClock className="h-4 w-4" /> Opens
-                  </Label>
-                  <Input type="datetime-local" value={opening} onChange={(e) => setOpening(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label className="flex items-center gap-2">
-                    <CalendarClock className="h-4 w-4" /> Expires
-                  </Label>
-                  <Input type="datetime-local" value={expiry} onChange={(e) => setExpiry(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label className="flex items-center gap-2">
-                  <KeyRound className="h-4 w-4" /> External issuer-approval address
-                </Label>
-                <Input
-                  placeholder="0x…"
-                  value={approver}
-                  onChange={(e) => setApprover(e.target.value)}
-                  className="font-mono"
-                />
-                <p className="text-xs text-muted-foreground">
-                  A distinct external wallet, different from the funding wallet. Each claim needs an
-                  Approval signature from this address.
-                </p>
-              </div>
-
-              <NomineDisclosure tone="warning" title="Issuer key">
-                {ISSUER_KEY_NOTICE}
-              </NomineDisclosure>
-
-              {estimatedTotalBaseUnits ? (
-                <div className="rounded-lg border border-border bg-surface/50 p-4 space-y-2">
-                  <NomineFactRow label="Recipients (estimate)" value={emails.length} />
-                  <NomineFactRow
-                    label="Total funding (estimate)"
-                    value={formatUsdcDisplay(estimatedTotalBaseUnits)}
-                    mono
-                  />
-                </div>
-              ) : null}
-
-              {capMessage ? (
-                <p className="text-sm text-danger">{capMessage}</p>
-              ) : null}
+              {capMessage ? <p className="text-sm text-danger">{capMessage}</p> : null}
 
               <Button
                 size="lg"
@@ -572,7 +806,8 @@ export default function Studio() {
                   </>
                 ) : (
                   <>
-                    Review terms
+                    Review &amp; fund
+                    {totalBaseUnits ? ` ${formatUsdcDisplay(totalBaseUnits)}` : ""}
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
@@ -581,7 +816,7 @@ export default function Studio() {
           </Card>
         )}
 
-        {/* ------ Existing campaigns ------ */}
+        {/* Existing campaigns */}
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-display text-xl font-semibold">Your campaigns</h2>
           {isCampaignsLoading ? <Spinner className="h-4 w-4 text-accent" /> : null}
@@ -593,14 +828,16 @@ export default function Studio() {
           <div className="space-y-3">
             {campaigns.map((campaign) => (
               <Link key={campaign.id} to={`/studio/${campaign.id}`} className="block">
-                <Card className="border border-border bg-card p-4 transition-colors hover:border-accent/40">
+                <Card className="min-w-0 border border-border bg-card p-4 transition-colors hover:border-accent/40">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">
-                          {campaign.entitlementCount} recipients ·{" "}
-                          {formatUsdcDisplay(campaign.allocation)} each
+                    <div className="flex min-w-0 items-center gap-3">
+                      <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">
+                          {campaign.name ||
+                            `${campaign.entitlementCount} recipients · ${formatUsdcDisplay(
+                              campaign.allocation
+                            )} each`}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           Opens {formatTimestampWithTimezone(campaign.openingTime)} · Expires{" "}
@@ -610,18 +847,27 @@ export default function Studio() {
                     </div>
                     <NomineStatusBadge kind="campaign" value={campaign.status} />
                   </div>
+                  <CampaignProgress
+                    className="mt-3"
+                    claimed={claimedCount(campaign, [])}
+                    total={campaign.entitlementCount}
+                    settled={campaign.accounting?.settled ?? "0"}
+                    budget={campaign.accounting?.budget ?? "0"}
+                  />
                 </Card>
               </Link>
             ))}
           </div>
         )}
 
-        <div className="mt-8 space-y-3">
-          <NomineDisclosure title="Funding evidence">{FUNDING_NOTICE}</NomineDisclosure>
-          <NomineDisclosure title="Recovery">{RECOVERY_RULE}</NomineDisclosure>
-          <NomineDisclosure tone="warning" title="Two-authority risk">
-            {D006_NOTICE}
-          </NomineDisclosure>
+        <div className="mt-8">
+          <NomineDetails label="About campaigns">
+            <NomineDisclosure title="Funding evidence">{FUNDING_NOTICE}</NomineDisclosure>
+            <NomineDisclosure title="Recovery">{RECOVERY_RULE}</NomineDisclosure>
+            <NomineDisclosure tone="warning" title="Two-authority risk">
+              {D006_NOTICE}
+            </NomineDisclosure>
+          </NomineDetails>
         </div>
       </div>
     </MainLayout>
