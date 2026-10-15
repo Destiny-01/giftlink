@@ -1,7 +1,8 @@
 import type { Campaign, ClaimRequest, Entitlement } from "@prisma/client";
 import { CampaignStatus, ClaimRequestStatus } from "@prisma/client";
 import { prisma } from "../config/prisma";
-import { backendSigner } from "../config/wallets";
+import { env } from "../config/env";
+import { autoApproverSigner, backendSigner } from "../config/wallets";
 import { logger } from "../config/logger";
 import {
   APPROVAL_TYPES,
@@ -21,7 +22,12 @@ import {
   ValidationError,
 } from "../utils/errors";
 import type { AuthenticatedUser } from "../middleware/auth";
-import type { ClaimRequestReceiptResponse, ConsentRequest } from "../dto/campaign.dto";
+import type {
+  CampaignApprovalMode,
+  ClaimRequestReceiptResponse,
+  ConsentReceiptResponse,
+  ConsentRequest,
+} from "../dto/campaign.dto";
 
 /**
  * The claimant/issuer workflow around one settlement.
@@ -93,6 +99,46 @@ export async function signResolverAttestation(
   return backendSigner.signTypedData(claimCoreDomain(), APPROVAL_TYPES, approval);
 }
 
+/**
+ * The campaign's approval mode, derived rather than stored (§D-021). A campaign is `auto`
+ * exactly when its configured approver is the Nomine auto-approver; every other approver is
+ * a distinct issuer-held key, i.e. `manual`.
+ */
+export function approvalModeOf(
+  campaign: Pick<Campaign, "issuerApproverAddress">
+): CampaignApprovalMode {
+  const configured = env.AUTO_APPROVER_ADDRESS?.toLowerCase();
+  return configured &&
+    campaign.issuerApproverAddress.toLowerCase() === configured
+    ? "auto"
+    : "manual";
+}
+
+/** Whether the campaign's approver is the Nomine auto-approver. */
+export function isAutoApprovalCampaign(
+  campaign: Pick<Campaign, "issuerApproverAddress">
+): boolean {
+  return approvalModeOf(campaign) === "auto";
+}
+
+/**
+ * Generates the auto-approver attestation over an approval payload.
+ *
+ * This is the second authority signature the backend can produce, and only for a campaign
+ * whose configured approver is the Nomine auto-approver. It is used by the `auto` consent
+ * path; the resolver attestation is still attached separately at settlement time.
+ */
+export async function signAutoApproverAttestation(
+  approval: ApprovalPayload
+): Promise<string> {
+  if (!autoApproverSigner) {
+    throw new ConfigurationError(
+      "No auto-approver is configured; this campaign cannot be approved automatically."
+    );
+  }
+  return autoApproverSigner.signTypedData(claimCoreDomain(), APPROVAL_TYPES, approval);
+}
+
 export function mapRequestReceipt(
   request: ClaimRequest
 ): ClaimRequestReceiptResponse {
@@ -159,7 +205,7 @@ export async function createConsent(
   campaignId: string,
   input: ConsentRequest,
   authUser?: AuthenticatedUser
-): Promise<ClaimRequestReceiptResponse> {
+): Promise<ConsentReceiptResponse> {
   requirePrivyId(authUser);
 
   const campaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
@@ -172,6 +218,60 @@ export async function createConsent(
   if (campaign.onchainId === null || campaign.onchainId === undefined) {
     throw new ValidationError("Campaign is not funded on-chain yet");
   }
+
+  const approvalMode = approvalModeOf(campaign);
+
+  /**
+   * Turns a stored consent into the response, auto-approving first when the campaign runs in
+   * `auto` mode. Autonomy is scoped exactly like the manual path: the approval is only stored
+   * for a request that is still `CONSENTED`, and an already-approved, submitted or settled
+   * request is returned unchanged, so a re-consent is idempotent rather than a second write.
+   */
+  const finalize = async (
+    record: ClaimRequest
+  ): Promise<ConsentReceiptResponse> => {
+    if (approvalMode === "manual") {
+      return { ...mapRequestReceipt(record), approvalMode };
+    }
+    if (
+      record.status === ClaimRequestStatus.ISSUER_APPROVED ||
+      record.status === ClaimRequestStatus.SUBMITTED ||
+      record.status === ClaimRequestStatus.SETTLED
+    ) {
+      return { ...mapRequestReceipt(record), approvalMode };
+    }
+
+    const approval = buildApprovalPayload(campaign, record);
+    const signature = await signAutoApproverAttestation(approval);
+    const recovered = recoverApprovalSigner(approval, signature);
+    if (recovered !== campaign.issuerApproverAddress.toLowerCase()) {
+      throw new ConfigurationError(
+        "The auto-approver signature does not recover to this campaign's approver. " +
+          "Refusing to store it."
+      );
+    }
+
+    const advanced = await storeVerifiedApproval(record.id, signature);
+
+    const stored = await prisma.claimRequest.findUnique({ where: { id: record.id } });
+    if (!stored) {
+      throw new NotFoundError("Claim request not found");
+    }
+
+    if (advanced > 0) {
+      logger.info(
+        {
+          operation: "createConsent",
+          outcome: "auto_approved",
+          campaignId,
+          requestId: record.id,
+        },
+        "Auto-approver attested the request"
+      );
+    }
+
+    return { ...mapRequestReceipt(stored), approvalMode };
+  };
 
   await requireOwnEntitlement(authUser as AuthenticatedUser, campaignId, input.entitlementId);
 
@@ -234,7 +334,7 @@ export async function createConsent(
       existing.walletAddress.toLowerCase() === wallet &&
       existing.amount === campaign.allocation
     ) {
-      return mapRequestReceipt(existing);
+      return finalize(existing);
     }
 
     // A standing request may be replaced only when it can no longer settle. The contract refuses
@@ -292,7 +392,7 @@ export async function createConsent(
         },
         "Expired consent replaced with a fresh signed request"
       );
-      if (afterRenewal) return mapRequestReceipt(afterRenewal);
+      if (afterRenewal) return finalize(afterRenewal);
     }
 
     // Lost the race: another request landed first. Converge when it is this exact request.
@@ -301,7 +401,7 @@ export async function createConsent(
       afterRenewal.consentDigest?.toLowerCase() === digest.toLowerCase() &&
       afterRenewal.walletAddress.toLowerCase() === wallet
     ) {
-      return mapRequestReceipt(afterRenewal);
+      return finalize(afterRenewal);
     }
 
     throw new ValidationError(
@@ -338,7 +438,7 @@ export async function createConsent(
         raced.consentDigest?.toLowerCase() === digest.toLowerCase() &&
         raced.walletAddress.toLowerCase() === wallet
       ) {
-        return mapRequestReceipt(raced);
+        return finalize(raced);
       }
       throw new ValidationError(
         "A live claim request already exists for this entitlement."
@@ -357,7 +457,36 @@ export async function createConsent(
     "Claimant consent recorded"
   );
 
-  return mapRequestReceipt(created);
+  return finalize(created);
+}
+
+/**
+ * Stores a verified issuer approval, guarded so only a request still awaiting one is
+ * advanced.
+ *
+ * Shared by the manual path (`submitIssuerApproval`, where the signature arrived from the
+ * issuer's key) and the automatic path (`createConsent`, where the auto-approver produced
+ * it), so both write the same fields under the same predicate. Returns the number of rows
+ * advanced: zero means the request had already moved on (submitted or settled).
+ */
+async function storeVerifiedApproval(
+  requestId: string,
+  signature: string
+): Promise<number> {
+  const updated = await prisma.claimRequest.updateMany({
+    where: {
+      id: requestId,
+      status: {
+        in: [ClaimRequestStatus.CONSENTED, ClaimRequestStatus.ISSUER_APPROVED],
+      },
+    },
+    data: {
+      issuerApprovalSignature: signature,
+      status: ClaimRequestStatus.ISSUER_APPROVED,
+      updatedAt: new Date(),
+    },
+  });
+  return updated.count;
 }
 
 /**
@@ -365,7 +494,9 @@ export async function createConsent(
  *
  * The signature must recover to the campaign's configured `issuerApprover`. It is never
  * produced by the backend: the issuer's key stays with the issuer (§10), and the software
- * only checks that what arrived is a valid approval over the stored request.
+ * only checks that what arrived is a valid approval over the stored request. An `auto`
+ * campaign has no manual approval to submit - its approver key is Nomine's, not the
+ * issuer's - so this path is refused and the consent path approves it instead.
  */
 export async function submitIssuerApproval(
   campaignId: string,
@@ -381,6 +512,12 @@ export async function submitIssuerApproval(
   }
   if (campaign.issuerPrivyId !== issuerPrivyId) {
     throw new ForbiddenError("Only the issuer can approve requests for this campaign");
+  }
+  if (isAutoApprovalCampaign(campaign)) {
+    throw new ValidationError(
+      "This campaign approves automatically; no manual issuer approval is needed.",
+      "campaign_auto_approval"
+    );
   }
 
   const request = await prisma.claimRequest.findUnique({ where: { id: requestId } });
@@ -416,21 +553,9 @@ export async function submitIssuerApproval(
     );
   }
 
-  const updated = await prisma.claimRequest.updateMany({
-    where: {
-      id: request.id,
-      status: {
-        in: [ClaimRequestStatus.CONSENTED, ClaimRequestStatus.ISSUER_APPROVED],
-      },
-    },
-    data: {
-      issuerApprovalSignature: signature,
-      status: ClaimRequestStatus.ISSUER_APPROVED,
-      updatedAt: new Date(),
-    },
-  });
+  const updatedCount = await storeVerifiedApproval(request.id, signature);
 
-  if (updated.count === 0) {
+  if (updatedCount === 0) {
     const current = await prisma.claimRequest.findUnique({ where: { id: request.id } });
     if (
       current?.status === ClaimRequestStatus.SUBMITTED ||

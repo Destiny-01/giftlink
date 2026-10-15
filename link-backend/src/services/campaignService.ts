@@ -36,6 +36,7 @@ import {
   fetchVerifiedCampaignReclaim,
   readOnchainCampaign,
 } from "./claimCoreEvidence";
+import { approvalModeOf } from "./claimRequestService";
 import type {
   CampaignAccountingResponse,
   CampaignPublicViewResponse,
@@ -91,7 +92,18 @@ export async function prepareCampaign(
   }
 
   const resolver = backendSigner.address.toLowerCase();
-  const issuerApprover = input.issuerApproverAddress.toLowerCase();
+  // The approver is either the issuer's own key (manual mode) or, when omitted, the Nomine
+  // auto-approver (auto mode, D-021). Without the latter and without an explicit address
+  // there is nothing to configure at funding time, so the issuer is asked for one.
+  const requestedApprover = input.issuerApproverAddress?.toLowerCase() ?? null;
+  const configuredAutoApprover = env.AUTO_APPROVER_ADDRESS?.toLowerCase() ?? null;
+  const issuerApprover = requestedApprover ?? configuredAutoApprover;
+  if (!issuerApprover) {
+    throw new ValidationError(
+      "Provide an issuer approver address, or configure the Nomine auto-approver " +
+        "(AUTO_APPROVER_ADDRESS) to approve automatically."
+    );
+  }
 
   // The contract requires the three roles to be distinct at funding time; catching it here
   // gives the issuer a clear message instead of a raw `AuthoritiesNotDistinct` revert.
@@ -523,6 +535,7 @@ function mapCampaignSummary(
     issuerAddress: campaign.issuerAddress,
     issuerApproverAddress: campaign.issuerApproverAddress,
     resolverAddress: campaign.resolverAddress,
+    approvalMode: approvalModeOf(campaign),
     fundingTxHash: campaign.fundingTxHash,
     reclaimedTxHash: campaign.reclaimedTxHash,
     accounting,
@@ -564,6 +577,7 @@ export function campaignPublicView(
     issuerAddress: campaign.issuerAddress,
     issuerApproverAddress: campaign.issuerApproverAddress,
     resolverAddress: campaign.resolverAddress,
+    approvalMode: approvalModeOf(campaign),
     allocation: campaign.allocation,
     entitlementCount: campaign.entitlementCount,
     budget: campaignBudget(campaign.allocation, campaign.entitlementCount),
@@ -852,6 +866,7 @@ function mapInboxEntry(
     workflowStatus,
     opensAt,
     settlementTxHash: entitlement.settlementTxHash,
+    approvalMode: approvalModeOf(campaign),
     campaign: campaignPublicView(campaign),
     request: request
       ? {

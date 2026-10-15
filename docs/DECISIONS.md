@@ -108,3 +108,15 @@ claimant-facing lifecycle groups remain **Available**, **Completed**, and **Expi
 Oversubscription is not reintroduced anywhere. The deployed Claim Core funds every listed entitlement for
 its own allocation, so an eligible unconsumed entitlement with no backing is a reconciliation error rather
 than a first-come allocation window or a fabricated **Expired** state.
+
+## D-021 — Delegated auto-approval
+
+Approved October 14, 2026. Automatic approval is the default: a campaign whose `issuerApprover` is the
+Nomine-held auto-approver key is approved by Nomine as soon as the claimant's verified email matches its
+entitlement and the claimant signs, so Nomine operates both the issuer-approver and Resolver authorities.
+The auto-approver key is distinct from the Resolver (`BACKEND_SIGNER`) and the relayer, and is checked at
+startup. An issuer who wants a second key held independently selects **manual** mode by supplying their own
+`issuerApprover` address, which preserves the D-019 two-key trust boundary unchanged. Delegated approval is
+bounded by the configured campaign caps (`MAX_CAMPAIGN_BUDGET_USDC`, `MAX_CAMPAIGN_RECIPIENTS`), which limit
+per-campaign exposure. D-019 remains available as manual mode and is superseded as the default.
+
